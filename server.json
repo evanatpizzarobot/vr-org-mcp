@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "org.vr/vr-mcp",
   "title": "VR.org VR / AR / XR Reader",
-  "description": "Read-only access to VR.org's live VR, AR, and XR news, original editorial, headset deals, buyer guides, and top-game and top-app lists.",
+  "description": "Read-only access to VR.org's live VR, AR, and XR news, editorial, deals, and buyer guides.",
   "version": "0.1.2",
   "websiteUrl": "https://vr.org",
   "repository": {
