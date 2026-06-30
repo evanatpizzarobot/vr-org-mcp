@@ -1,7 +1,7 @@
 {
   "name": "vr-org-mcp",
-  "version": "0.1.0",
-  "mcpName": "org.vr/vr-mcp",
+  "version": "0.1.1",
+  "mcpName": "io.github.evanatpizzarobot/vr-org-mcp",
   "description": "Read-only MCP server for VR.org. Gives AI agents one-call access to live VR, AR, and XR news, original editorial, headset deals, buyer guides, and top-game and top-app lists.",
   "type": "module",
   "main": "dist/index.js",

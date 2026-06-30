@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "org.vr/vr-mcp",
+  "name": "io.github.evanatpizzarobot/vr-org-mcp",
   "title": "VR.org VR / AR / XR Reader",
   "description": "Read-only access to VR.org's live VR, AR, and XR news, original editorial, headset deals, buyer guides, and top-game and top-app lists.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "websiteUrl": "https://vr.org",
   "repository": {
     "url": "https://github.com/evanatpizzarobot/vr-org-mcp",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "vr-org-mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

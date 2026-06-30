@@ -3,7 +3,7 @@
   "manifest_version": "0.3",
   "name": "vr-org-mcp",
   "display_name": "VR.org VR / AR / XR Reader",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read-only access to VR.org's live VR, AR, and XR news, editorial, deals, and buyer guides.",
   "long_description": "Read-only Model Context Protocol server that gives AI agents one-call access to VR.org, a dedicated VR / AR / XR news publication and aggregator. Ten tools, zero keys, zero writes.\n\nNews and discovery: search the live aggregated feed of VR, AR, and XR headlines across VR-native and filtered general-tech sources, get currently trending topics, and list the sources VR.org aggregates.\n\nEditorial: list VR.org's original articles (reporting, opinion, retrospectives, guides) and fetch any one by slug.\n\nShopping and guides: get VR.org's curated product deals and prices, compare two headsets side by side, pull the current top-VR-games and top-VR-apps lists, and get canonical short answers with pillar-page links for common questions like what is VR, best headset, and AR glasses.\n\nEvery tool is read-only and simply composes VR.org's public JSON API. The server holds no secrets, accepts no payments, and cannot write anything. Outputs are sanitized (control and direction-override characters stripped) and capped at 50 KB so a malicious upstream headline cannot inject content into the calling agent's reasoning or blow out its context window.",
   "author": {

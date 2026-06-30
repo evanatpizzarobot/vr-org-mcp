@@ -9,7 +9,7 @@
 
 import { sanitizeString } from "./security/sanitize.js";
 
-export const PACKAGE_VERSION = "0.1.0";
+export const PACKAGE_VERSION = "0.1.1";
 
 export const BASE_URL = (process.env.VR_ORG_BASE_URL || "https://vr.org").replace(
   /\/+$/,
