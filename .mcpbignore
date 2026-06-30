@@ -1,0 +1,20 @@
+# Keep the bundle lean: ship dist/ + production node_modules + manifest only.
+src/
+tests/
+.github/
+.git/
+*.ts
+tsconfig.json
+vitest.config.ts
+.gitignore
+.env.example
+.env
+key.pem
+*.pem
+mcp-publisher.exe
+*.tar.gz
+*.mcpb
+.mcpbignore
+package-lock.json
+smoke.mjs
+mcp-smoke.mjs
