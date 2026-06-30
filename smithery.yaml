@@ -1,0 +1,23 @@
+# Smithery configuration for vr-org-mcp  (https://smithery.ai)
+#
+# vr-org-mcp is a local stdio MCP server distributed on npm. Smithery lists it
+# and MCP clients launch it on the user's machine via npx. No hosting, no keys.
+#
+# Docs: https://smithery.ai/docs/build/project-config/smithery.yaml
+startCommand:
+  type: stdio
+  # The server needs no configuration. The single optional field overrides the
+  # VR.org base URL (only useful for pointing at a staging copy of the site).
+  configSchema:
+    type: object
+    properties:
+      vrOrgBaseUrl:
+        type: string
+        description: Optional base URL override. Defaults to https://vr.org.
+    required: []
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', 'vr-org-mcp'],
+      env: config.vrOrgBaseUrl ? { VR_ORG_BASE_URL: config.vrOrgBaseUrl } : {}
+    })
