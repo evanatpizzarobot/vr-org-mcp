@@ -1,0 +1,63 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "org.vr/vr-mcp",
+  "title": "VR.org VR / AR / XR Reader",
+  "description": "Read-only access to VR.org's live VR, AR, and XR news, original editorial, headset deals, buyer guides, and top-game and top-app lists.",
+  "version": "0.1.0",
+  "websiteUrl": "https://vr.org",
+  "repository": {
+    "url": "https://github.com/evanatpizzarobot/vr-org-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "vr-org-mcp",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "VR_ORG_BASE_URL",
+          "description": "Optional base URL override. Defaults to https://vr.org. Only useful for pointing at a staging copy of the site.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "categories": ["data", "news", "search"],
+      "tags": [
+        "vr",
+        "ar",
+        "xr",
+        "virtual-reality",
+        "augmented-reality",
+        "spatial-computing",
+        "news",
+        "read-only",
+        "headsets",
+        "vr-org"
+      ],
+      "license": "MIT",
+      "premium": false,
+      "freeTools": [
+        "search_vr_news",
+        "get_vr_trending",
+        "list_vr_originals",
+        "get_vr_article",
+        "get_vr_deals",
+        "compare_vr_headsets",
+        "get_top_vr_games",
+        "get_top_vr_apps",
+        "list_vr_sources",
+        "vr_explain"
+      ]
+    }
+  }
+}
