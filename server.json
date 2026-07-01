@@ -3,7 +3,7 @@
   "name": "org.vr/vr-mcp",
   "title": "VR.org VR / AR / XR Reader",
   "description": "Read-only VR / AR / XR news, full-text editorial, events, deals, and buyer guides from VR.org.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "websiteUrl": "https://vr.org",
   "repository": {
     "url": "https://github.com/evanatpizzarobot/vr-org-mcp",
