@@ -15,7 +15,7 @@
  * (50 KB) before being returned. No keys, no writes, no payments.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
@@ -31,9 +31,20 @@ import {
   get_top_vr_apps,
   list_vr_sources,
   vr_explain,
+  resource_news_latest,
+  resource_originals_latest,
+  resource_events_upcoming,
+  resource_guides,
+  resource_article,
+  resource_article_list,
 } from "./tools/content.js";
+import {
+  recommendHeadsetPrompt,
+  thisWeekInVrPrompt,
+  explainVrTopicPrompt,
+} from "./prompts.js";
 import { safeRun } from "./security/errors.js";
-import { sanitizeValue } from "./security/sanitize.js";
+import { sanitizeValue, sanitizeString } from "./security/sanitize.js";
 import { enforceResponseCap, MAX_RESPONSE_BYTES } from "./security/limits.js";
 import { PACKAGE_VERSION } from "./config.js";
 
@@ -219,6 +230,147 @@ server.registerTool(
     annotations: { ...READ_ONLY, title: "Explain a VR / AR / XR topic" },
   },
   wrapTool((args) => vr_explain(args)),
+);
+
+/**
+ * Resources: browsable VR.org content an MCP host can attach as context. Text is
+ * sanitized and capped like tool output. Read failures degrade to a short notice
+ * rather than throwing at the client.
+ */
+function resourceResult(uri: string, mimeType: string, raw: string) {
+  return { contents: [{ uri, mimeType, text: sanitizeString(raw, MAX_RESPONSE_BYTES) }] };
+}
+
+function readStatic(mimeType: string, loader: () => Promise<string> | string) {
+  return async (uri: URL) => {
+    try {
+      return resourceResult(uri.href, mimeType, await loader());
+    } catch {
+      return resourceResult(uri.href, "text/plain", "VR.org resource is temporarily unavailable. Retry shortly.");
+    }
+  };
+}
+
+server.registerResource(
+  "vr-news-latest",
+  "vrorg://news/latest",
+  {
+    title: "Latest VR / AR / XR headlines",
+    description: "Live aggregated VR, AR, and XR headlines from VR.org, as a markdown list.",
+    mimeType: "text/markdown",
+  },
+  readStatic("text/markdown", resource_news_latest),
+);
+
+server.registerResource(
+  "vr-originals-latest",
+  "vrorg://originals/latest",
+  {
+    title: "Latest VR.org original articles",
+    description: "Index of VR.org's newest original articles with links and snippets.",
+    mimeType: "text/markdown",
+  },
+  readStatic("text/markdown", resource_originals_latest),
+);
+
+server.registerResource(
+  "vr-events-upcoming",
+  "vrorg://events/upcoming",
+  {
+    title: "Upcoming VR / AR / XR events",
+    description: "VR.org's calendar of upcoming VR, AR, and XR industry events, soonest first.",
+    mimeType: "text/markdown",
+  },
+  readStatic("text/markdown", resource_events_upcoming),
+);
+
+server.registerResource(
+  "vr-guides",
+  "vrorg://guides",
+  {
+    title: "VR.org guides: canonical answers",
+    description: "VR.org's short authoritative answers to common VR / AR / XR questions, with guide links.",
+    mimeType: "text/markdown",
+  },
+  readStatic("text/markdown", async () => resource_guides()),
+);
+
+server.registerResource(
+  "vr-article",
+  new ResourceTemplate("vrorg://article/{slug}", {
+    list: async () => {
+      try {
+        const items = await resource_article_list();
+        return {
+          resources: items.map((it) => ({
+            uri: `vrorg://article/${it.slug}`,
+            name: it.slug,
+            title: it.title ?? it.slug,
+            mimeType: "text/html",
+          })),
+        };
+      } catch {
+        return { resources: [] };
+      }
+    },
+  }),
+  {
+    title: "VR.org article (full text)",
+    description: "Full HTML body of any VR.org original article, addressed by its slug.",
+    mimeType: "text/html",
+  },
+  async (uri, variables) => {
+    const slugVar = variables.slug;
+    const slug = Array.isArray(slugVar) ? slugVar[0] ?? "" : String(slugVar ?? "");
+    try {
+      return resourceResult(uri.href, "text/html", await resource_article(slug));
+    } catch {
+      return resourceResult(uri.href, "text/plain", "VR.org article is temporarily unavailable. Retry shortly.");
+    }
+  },
+);
+
+/**
+ * Prompts: reusable templates a user can invoke that steer the model to answer
+ * using the tools and resources above.
+ */
+server.registerPrompt(
+  "recommend_a_headset",
+  {
+    title: "Recommend a VR headset",
+    description: "Recommend a headset from VR.org's current picks, grounded in live deals and the buyer guide.",
+    argsSchema: {
+      budget: z.string().optional().describe("Your budget, e.g. '$400' or 'under $1000'."),
+      use_case: z.string().optional().describe("Main use, e.g. 'PC VR gaming', 'fitness', 'movies'."),
+    },
+  },
+  ({ budget, use_case }) => ({
+    messages: [{ role: "user", content: { type: "text", text: recommendHeadsetPrompt({ budget, use_case }) } }],
+  }),
+);
+
+server.registerPrompt(
+  "this_week_in_vr",
+  {
+    title: "This Week in VR",
+    description: "Draft a concise weekly VR / AR / XR roundup from VR.org's news and originals.",
+    argsSchema: { category: z.string().optional().describe(CATEGORY_DESC) },
+  },
+  ({ category }) => ({
+    messages: [{ role: "user", content: { type: "text", text: thisWeekInVrPrompt({ category }) } }],
+  }),
+);
+
+server.registerPrompt(
+  "explain_vr_topic",
+  {
+    title: "Explain a VR / AR / XR topic",
+    description: "Explain a VR topic for a newcomer, grounded in VR.org's canonical answer and pillar page.",
+    argsSchema: { topic: z.string().describe("The topic, e.g. 'what is vr' or 'passthrough'.") },
+  },
+  ({ topic }) => ({
+    messages: [{ role: "user", content: { type: "text", text: explainVrTopicPrompt({ topic }) } }],
+  }),
 );
 
 async function main() {

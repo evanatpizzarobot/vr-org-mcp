@@ -4,7 +4,7 @@ Read-only [Model Context Protocol](https://modelcontextprotocol.io) server for *
 
 It gives any MCP-compatible agent (Claude Desktop, Claude Code, Cursor, Continue, and others) one-call access to live VR, AR, and XR news, VR.org's original editorial (including full article text), the VR/AR/XR events calendar, curated headset deals, buyer-guide answers, and top-game and top-app lists.
 
-Eleven tools. Zero keys. Zero writes. Zero payments.
+Eleven tools, five resources, and three prompts. Zero keys. Zero writes. Zero payments.
 
 ## Install
 
@@ -73,6 +73,26 @@ https://vr.org/mcp
 | `get_top_vr_apps` | Current ranked top VR apps and utilities list |
 | `list_vr_sources` | The news sources VR.org aggregates, with counts |
 | `vr_explain` | Canonical short answer plus pillar-page link for a common question |
+
+## Resources
+
+Browsable MCP resources an app can attach as context:
+
+| Resource | Contents |
+|----------|----------|
+| `vrorg://news/latest` | Latest aggregated VR / AR / XR headlines |
+| `vrorg://originals/latest` | Index of VR.org's newest original articles |
+| `vrorg://events/upcoming` | Upcoming VR / AR / XR industry events |
+| `vrorg://guides` | VR.org's canonical pillar-guide answers in one doc |
+| `vrorg://article/{slug}` | Full HTML body of any original article (resource template) |
+
+## Prompts
+
+| Prompt | What it does |
+|--------|--------------|
+| `recommend_a_headset` | Recommends a headset from VR.org's picks given a budget and use case |
+| `this_week_in_vr` | Drafts a weekly VR / AR / XR roundup from the feed and originals |
+| `explain_vr_topic` | Explains a VR topic grounded in VR.org's canonical answer |
 
 ## How it works
 

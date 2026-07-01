@@ -17,6 +17,13 @@ import { UpstreamError } from "../security/errors.js";
 import { EXPLAINERS, findExplainer } from "../explainers.js";
 import { matchHeadset } from "../match.js";
 import { selectEvents } from "../events.js";
+import {
+  formatNewsIndex,
+  formatOriginalsIndex,
+  formatEventsList,
+  formatGuidesDoc,
+  formatArticle,
+} from "../resources.js";
 
 const HOMEPAGE = "https://vr.org";
 
@@ -345,6 +352,71 @@ export async function list_vr_sources() {
     meta: data?.meta ?? null,
     source: HOMEPAGE,
   };
+}
+
+// ---------- resource content (read by the MCP resources registered in index.ts) ----------
+
+/** vrorg://news/latest : markdown index of the latest aggregated headlines. */
+export async function resource_news_latest(): Promise<string> {
+  const data = (await cached("feed:all", TTL.FEED, () =>
+    fetchJson("/api/feed", { category: "all", limit: 25 }),
+  )) as { articles?: RawArticle[] };
+  const items = (Array.isArray(data?.articles) ? data.articles : []).slice(0, 25).map(mapFeedArticle);
+  return formatNewsIndex(items);
+}
+
+/** vrorg://originals/latest : markdown index of the latest VR.org originals. */
+export async function resource_originals_latest(): Promise<string> {
+  const data = (await cached("originals:all", TTL.ARTICLES, () =>
+    fetchJson("/api/articles", {}),
+  )) as { articles?: RawArticle[] };
+  const items = (Array.isArray(data?.articles) ? data.articles : []).slice(0, 25).map(mapOriginal);
+  return formatOriginalsIndex(items);
+}
+
+/** vrorg://events/upcoming : markdown list of upcoming VR/AR/XR events. */
+export async function resource_events_upcoming(): Promise<string> {
+  const data = (await cached("events", TTL.EVENTS, () => fetchJson("/api/events"))) as {
+    events?: unknown;
+  };
+  const today = new Date().toISOString().slice(0, 10);
+  const { items } = selectEvents(data?.events, { today, includePast: false, limit: 25 });
+  return formatEventsList(items);
+}
+
+/** vrorg://guides : VR.org's canonical pillar-guide answers in one doc. */
+export function resource_guides(): string {
+  return formatGuidesDoc(
+    EXPLAINERS.map((e) => ({ title: e.title, summary: e.summary, url: `${BASE_URL}${e.path}` })),
+  );
+}
+
+/** vrorg://article/{slug} : full HTML body of one original by slug. */
+export async function resource_article(slug: string): Promise<string> {
+  const res = await get_vr_article({ slug });
+  if (!res.ok || !res.article) {
+    return `<p>Article "${slug}" was not found. List available articles via the vrorg://originals/latest resource.</p>`;
+  }
+  const a = res.article;
+  return formatArticle({
+    title: a.title,
+    author: a.author,
+    published: a.published,
+    url: a.url,
+    body_html: a.body_html,
+  });
+}
+
+/** Latest originals as {slug,title} for the article resource template's list. */
+export async function resource_article_list(): Promise<Array<{ slug: string; title: string | null }>> {
+  const data = (await cached("originals:all", TTL.ARTICLES, () =>
+    fetchJson("/api/articles", {}),
+  )) as { articles?: RawArticle[] };
+  const all = Array.isArray(data?.articles) ? data.articles : [];
+  return all
+    .slice(0, 30)
+    .map((a) => ({ slug: a.slug ?? a.id ?? "", title: a.title ?? null }))
+    .filter((x) => x.slug.length > 0);
 }
 
 /** vr_explain: a canonical VR.org answer + pillar link for a topic. */

@@ -12,6 +12,18 @@ import { absoluteUrl } from "../src/config.js";
 import { findExplainer, EXPLAINERS } from "../src/explainers.js";
 import { matchHeadset } from "../src/match.js";
 import { selectEvents } from "../src/events.js";
+import {
+  formatNewsIndex,
+  formatOriginalsIndex,
+  formatEventsList,
+  formatGuidesDoc,
+  formatArticle,
+} from "../src/resources.js";
+import {
+  recommendHeadsetPrompt,
+  thisWeekInVrPrompt,
+  explainVrTopicPrompt,
+} from "../src/prompts.js";
 
 const CATALOG = [
   "Meta Quest 3S (128GB)",
@@ -161,6 +173,96 @@ describe("selectEvents", () => {
       items: [],
       total: 0,
     });
+  });
+});
+
+describe("resource formatters", () => {
+  it("formats a news index with links and meta", () => {
+    const out = formatNewsIndex([
+      { title: "Quest 4 leaks", url: "https://vr.org/x", source: "Road to VR", published: "2026-07-01T10:00:00Z" },
+    ]);
+    expect(out).toContain("# Latest VR / AR / XR headlines");
+    expect(out).toContain("[Quest 4 leaks](https://vr.org/x)");
+    expect(out).toContain("(Road to VR, 2026-07-01)");
+  });
+
+  it("shows an empty-state line when there is no news", () => {
+    expect(formatNewsIndex([])).toContain("No headlines available");
+  });
+
+  it("formats originals with snippet lines", () => {
+    const out = formatOriginalsIndex([
+      { title: "Why VR horror works", url: "https://vr.org/a", author: "Evan Marcus", published: "2026-06-30", snippet: "A take." },
+    ]);
+    expect(out).toContain("[Why VR horror works](https://vr.org/a)");
+    expect(out).toContain("A take.");
+  });
+
+  it("formats an events list soonest-first with dates", () => {
+    const out = formatEventsList([
+      { name: "SIGGRAPH 2026", start_date: "2026-07-19", end_date: "2026-07-23", location: "Los Angeles, CA", url: "https://s" },
+    ]);
+    expect(out).toContain("**SIGGRAPH 2026**");
+    expect(out).toContain("2026-07-19 to 2026-07-23");
+    expect(out).toContain("Los Angeles, CA");
+  });
+
+  it("formats a guides doc with headings and links", () => {
+    const out = formatGuidesDoc([{ title: "What Is VR?", summary: "It is immersive.", url: "https://vr.org/what-is-vr" }]);
+    expect(out).toContain("## What Is VR?");
+    expect(out).toContain("Guide: https://vr.org/what-is-vr");
+  });
+
+  it("formats an article with header, body, and source", () => {
+    const out = formatArticle({ title: "T", author: "Nina Castillo", published: "2026-07-01", url: "https://vr.org/t", body_html: "<p>Body</p>" });
+    expect(out).toContain("<h1>T</h1>");
+    expect(out).toContain("<p>Body</p>");
+    expect(out).toContain('href="https://vr.org/t"');
+  });
+});
+
+describe("prompt builders", () => {
+  it("fills headset prompt defaults", () => {
+    const out = recommendHeadsetPrompt({});
+    expect(out).toContain("no strict budget");
+    expect(out).toContain("general VR use");
+    expect(out).toContain("compare_vr_headsets");
+  });
+
+  it("uses provided headset args", () => {
+    const out = recommendHeadsetPrompt({ budget: "$400", use_case: "fitness" });
+    expect(out).toContain("Budget: $400");
+    expect(out).toContain("Main use: fitness");
+  });
+
+  it("adds category focus to the weekly roundup", () => {
+    expect(thisWeekInVrPrompt({ category: "hardware" })).toContain("focused on hardware");
+    expect(thisWeekInVrPrompt({})).toContain("This Week in VR");
+  });
+
+  it("embeds the topic in the explain prompt", () => {
+    expect(explainVrTopicPrompt({ topic: "passthrough" })).toContain('"passthrough"');
+    expect(explainVrTopicPrompt({})).toContain("virtual reality");
+  });
+});
+
+describe("no em dashes anywhere in generated text", () => {
+  it("resource + prompt output is free of em/en dashes", () => {
+    const samples = [
+      formatNewsIndex([{ title: "A", url: "u", source: "S", published: "2026-07-01" }]),
+      formatOriginalsIndex([{ title: "A", url: "u", author: "X", published: "2026-07-01", snippet: "s" }]),
+      formatEventsList([{ name: "E", start_date: "2026-07-01", end_date: "2026-07-03", location: "LA", url: "u" }]),
+      formatGuidesDoc([{ title: "G", summary: "s", url: "u" }]),
+      formatArticle({ title: "T", author: "A", published: "2026-07-01", url: "u", body_html: "<p>b</p>" }),
+      recommendHeadsetPrompt({ budget: "$1", use_case: "x" }),
+      thisWeekInVrPrompt({ category: "ar" }),
+      explainVrTopicPrompt({ topic: "t" }),
+    ];
+    for (const s of samples) {
+      expect(s.includes("—")).toBe(false); // em dash
+      expect(s.includes("–")).toBe(false); // en dash
+      expect(s.includes("--")).toBe(false); // double hyphen
+    }
   });
 });
 
