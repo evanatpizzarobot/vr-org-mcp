@@ -54,6 +54,7 @@ export const TTL = {
   DEALS: 10 * 60_000,
   TOP_LISTS: 10 * 60_000,
   SOURCES: 5 * 60_000,
+  EVENTS: 10 * 60_000,
 } as const;
 
 export async function cached<T>(

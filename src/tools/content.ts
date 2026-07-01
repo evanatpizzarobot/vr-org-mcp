@@ -13,8 +13,10 @@ import {
   requireSlug,
   requireString,
 } from "../security/validate.js";
+import { UpstreamError } from "../security/errors.js";
 import { EXPLAINERS, findExplainer } from "../explainers.js";
 import { matchHeadset } from "../match.js";
+import { selectEvents } from "../events.js";
 
 const HOMEPAGE = "https://vr.org";
 
@@ -133,17 +135,29 @@ export async function list_vr_originals(args: { category?: unknown; limit?: unkn
   };
 }
 
-/** get_vr_article: metadata + canonical URL for one VR.org original by slug. */
+/** get_vr_article: full content (metadata + body HTML) for one original by slug. */
 export async function get_vr_article(args: { slug?: unknown }) {
   const slug = requireSlug(args.slug);
   await rateLimit("get_vr_article");
 
-  const data = (await cached("originals:all", TTL.ARTICLES, () =>
-    fetchJson("/api/articles", {}),
-  )) as { articles?: RawArticle[] };
+  let data: { article?: RawArticle & { body?: string } };
+  try {
+    data = (await cached(`article:${slug}`, TTL.ARTICLES, () =>
+      fetchJson("/api/articles", { slug }),
+    )) as { article?: RawArticle & { body?: string } };
+  } catch (err) {
+    if (err instanceof UpstreamError && err.status === 404) {
+      return {
+        ok: false as const,
+        error: "article_not_found",
+        slug,
+        hint: "Call list_vr_originals to see available slugs.",
+      };
+    }
+    throw err;
+  }
 
-  const all = Array.isArray(data?.articles) ? data.articles : [];
-  const match = all.find((a) => (a.slug ?? a.id) === slug);
+  const match = data?.article;
   if (!match) {
     return {
       ok: false as const,
@@ -154,9 +168,30 @@ export async function get_vr_article(args: { slug?: unknown }) {
   }
   return {
     ok: true as const,
-    article: mapOriginal(match),
-    note: "Full article text is published at the canonical url.",
+    article: { ...mapOriginal(match), body_html: match.body ?? null },
     source: HOMEPAGE,
+  };
+}
+
+/** get_vr_events: upcoming VR/AR/XR industry events from VR.org's calendar. */
+export async function get_vr_events(args: { limit?: unknown; include_past?: unknown }) {
+  const limit = clampLimit(args.limit, 10, 50);
+  const includePast = args.include_past === true || args.include_past === "true";
+  await rateLimit("get_vr_events");
+
+  const data = (await cached("events", TTL.EVENTS, () =>
+    fetchJson("/api/events"),
+  )) as { events?: unknown };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const { items, total } = selectEvents(data?.events, { today, includePast, limit });
+  return {
+    ok: true as const,
+    count: items.length,
+    total,
+    include_past: includePast,
+    events: items,
+    source: `${BASE_URL}/events`,
   };
 }
 

@@ -11,6 +11,7 @@ import {
 import { absoluteUrl } from "../src/config.js";
 import { findExplainer, EXPLAINERS } from "../src/explainers.js";
 import { matchHeadset } from "../src/match.js";
+import { selectEvents } from "../src/events.js";
 
 const CATALOG = [
   "Meta Quest 3S (128GB)",
@@ -104,6 +105,62 @@ describe("validate", () => {
   it("requires non-empty strings", () => {
     expect(requireString("  hi  ", "x")).toBe("hi");
     expect(() => requireString("   ", "x")).toThrow(ValidationError);
+  });
+});
+
+describe("selectEvents", () => {
+  const evs = [
+    { name: "Past", startDate: "2020-01-01", endDate: "2020-01-02" },
+    { name: "Ongoing", startDate: "2026-06-30", endDate: "2026-07-05" },
+    { name: "Future A", startDate: "2026-09-01" },
+    { name: "Future B", startDate: "2026-08-01" },
+    { badWithoutStart: true },
+  ];
+
+  it("drops past events, keeps a currently-running one, sorts soonest-first", () => {
+    const { items, total } = selectEvents(evs, {
+      today: "2026-07-01",
+      includePast: false,
+      limit: 10,
+    });
+    expect(items.map((e) => e.name)).toEqual(["Ongoing", "Future B", "Future A"]);
+    expect(total).toBe(3);
+  });
+
+  it("includes past events when asked", () => {
+    const { items } = selectEvents(evs, {
+      today: "2026-07-01",
+      includePast: true,
+      limit: 10,
+    });
+    expect(items[0].name).toBe("Past");
+    expect(items).toHaveLength(4);
+  });
+
+  it("respects the limit but still reports the true total", () => {
+    const { items, total } = selectEvents(evs, {
+      today: "2026-07-01",
+      includePast: true,
+      limit: 2,
+    });
+    expect(items).toHaveLength(2);
+    expect(total).toBe(4);
+  });
+
+  it("maps fields to snake_case and defaults featured to false", () => {
+    const { items } = selectEvents([{ name: "X", startDate: "2026-08-01", url: "https://e" }], {
+      today: "2026-07-01",
+      includePast: false,
+      limit: 10,
+    });
+    expect(items[0]).toMatchObject({ name: "X", start_date: "2026-08-01", url: "https://e", featured: false });
+  });
+
+  it("returns empty for non-array input", () => {
+    expect(selectEvents(null, { today: "2026-07-01", includePast: false, limit: 10 })).toEqual({
+      items: [],
+      total: 0,
+    });
   });
 });
 

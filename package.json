@@ -1,8 +1,8 @@
 {
   "name": "vr-org-mcp",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "mcpName": "org.vr/vr-mcp",
-  "description": "Read-only MCP server for VR.org. Gives AI agents one-call access to live VR, AR, and XR news, original editorial, headset deals, buyer guides, and top-game and top-app lists.",
+  "description": "Read-only MCP server for VR.org. Gives AI agents one-call access to live VR, AR, and XR news, original editorial with full article text, the events calendar, headset deals, buyer guides, and top-game and top-app lists.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

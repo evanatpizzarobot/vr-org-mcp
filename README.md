@@ -2,9 +2,9 @@
 
 Read-only [Model Context Protocol](https://modelcontextprotocol.io) server for **[VR.org](https://vr.org)**, a dedicated VR / AR / XR news publication and aggregator.
 
-It gives any MCP-compatible agent (Claude Desktop, Claude Code, Cursor, Continue, and others) one-call access to live VR, AR, and XR news, VR.org's original editorial, curated headset deals, buyer-guide answers, and top-game and top-app lists.
+It gives any MCP-compatible agent (Claude Desktop, Claude Code, Cursor, Continue, and others) one-call access to live VR, AR, and XR news, VR.org's original editorial (including full article text), the VR/AR/XR events calendar, curated headset deals, buyer-guide answers, and top-game and top-app lists.
 
-Ten tools. Zero keys. Zero writes. Zero payments.
+Eleven tools. Zero keys. Zero writes. Zero payments.
 
 ## Install
 
@@ -35,6 +35,29 @@ Add to your `claude_desktop_config.json`:
 claude mcp add vr-org -- npx -y vr-org-mcp
 ```
 
+### Cursor
+
+Add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "vr-org": {
+      "command": "npx",
+      "args": ["-y", "vr-org-mcp"]
+    }
+  }
+}
+```
+
+### Hosted remote endpoint (no install)
+
+VR.org also runs the same tools as a remote server over MCP's streamable-HTTP transport, so web clients (ChatGPT connectors, Claude.ai connectors) can use it with no local install:
+
+```
+https://vr.org/mcp
+```
+
 ## Tools
 
 | Tool | What it returns |
@@ -42,7 +65,8 @@ claude mcp add vr-org -- npx -y vr-org-mcp
 | `search_vr_news` | Latest VR / AR / XR headlines from the live feed, with optional category filter and keyword match |
 | `get_vr_trending` | Topics currently trending across the feed |
 | `list_vr_originals` | Summaries of VR.org's own editorial articles, newest first |
-| `get_vr_article` | Metadata and canonical URL for one original by slug |
+| `get_vr_article` | Full content of one original by slug: metadata, canonical URL, and the article body HTML |
+| `get_vr_events` | Upcoming VR / AR / XR industry events (conferences, expos, launches), soonest first |
 | `get_vr_deals` | Curated product picks with prices, badges, and retailer links |
 | `compare_vr_headsets` | Side-by-side of two headsets (partial names accepted) |
 | `get_top_vr_games` | Current ranked top VR games list |

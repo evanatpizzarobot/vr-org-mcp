@@ -24,6 +24,7 @@ import {
   get_vr_trending,
   list_vr_originals,
   get_vr_article,
+  get_vr_events,
   get_vr_deals,
   compare_vr_headsets,
   get_top_vr_games,
@@ -115,13 +116,31 @@ server.registerTool(
   {
     title: "Get a VR.org article by slug",
     description:
-      "Returns metadata (title, author, date, category, tags, snippet) and the canonical URL for a single VR.org original article identified by its slug.",
+      "Returns the full content of a single VR.org original article by its slug: metadata (title, author, date, category, tags, snippet), the canonical URL, and the article body HTML.",
     inputSchema: {
       slug: z.string().describe("The article slug, e.g. 'why-vr-is-the-perfect-horror-machine'."),
     },
     annotations: { ...READ_ONLY, title: "Get a VR.org article by slug" },
   },
   wrapTool((args) => get_vr_article(args)),
+);
+
+server.registerTool(
+  "get_vr_events",
+  {
+    title: "Get upcoming VR / AR / XR events",
+    description:
+      "Returns upcoming VR, AR, and XR industry events (conferences, expos, launches) from VR.org's events calendar, soonest first. Set include_past to also include events that have already ended.",
+    inputSchema: {
+      limit: z.number().optional().describe("Max results, 1-50 (default 10)."),
+      include_past: z
+        .boolean()
+        .optional()
+        .describe("Include events that have already ended (default false)."),
+    },
+    annotations: { ...READ_ONLY, title: "Get upcoming VR / AR / XR events" },
+  },
+  wrapTool((args) => get_vr_events(args)),
 );
 
 server.registerTool(
