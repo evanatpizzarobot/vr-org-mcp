@@ -14,6 +14,7 @@ import {
   requireString,
 } from "../security/validate.js";
 import { UpstreamError } from "../security/errors.js";
+import { sanitizeReflectedValue } from "../security/sanitize.js";
 import { EXPLAINERS, findExplainer } from "../explainers.js";
 import { matchHeadset } from "../match.js";
 import { selectEvents } from "../events.js";
@@ -97,7 +98,7 @@ export async function search_vr_news(args: {
   const items = articles.slice(0, limit).map(mapFeedArticle);
   return {
     ok: true as const,
-    query: query ?? null,
+    query: query ? sanitizeReflectedValue(query) : null,
     category: category ?? "all",
     count: items.length,
     last_updated: data?.meta?.lastUpdated ?? null,
@@ -292,7 +293,7 @@ export async function compare_vr_headsets(args: { a?: unknown; b?: unknown }) {
     return {
       ok: false as const,
       error: "headset_not_found",
-      missing: [!hitA ? a : null, !hitB ? b : null].filter(Boolean),
+      missing: [!hitA ? sanitizeReflectedValue(a) : null, !hitB ? sanitizeReflectedValue(b) : null].filter(Boolean),
       available: pool.map((it) => it.name).filter(Boolean),
       hint: "Use one of the available names (partial match is allowed).",
     };
@@ -395,7 +396,7 @@ export function resource_guides(): string {
 export async function resource_article(slug: string): Promise<string> {
   const res = await get_vr_article({ slug });
   if (!res.ok || !res.article) {
-    return `<p>Article "${slug}" was not found. List available articles via the vrorg://originals/latest resource.</p>`;
+    return `<p>Article "${sanitizeReflectedValue(slug)}" was not found. List available articles via the vrorg://originals/latest resource.</p>`;
   }
   const a = res.article;
   return formatArticle({
@@ -427,14 +428,14 @@ export async function vr_explain(args: { topic?: unknown }) {
     return {
       ok: false as const,
       error: "no_explainer",
-      topic,
+      topic: sanitizeReflectedValue(topic),
       available_topics: EXPLAINERS.map((e) => e.title),
       hint: "Try a broader topic like 'what is vr', 'best headset', or 'ar glasses'.",
     };
   }
   return {
     ok: true as const,
-    topic,
+    topic: sanitizeReflectedValue(topic),
     title: hit.title,
     summary: hit.summary,
     url: `${BASE_URL}${hit.path}`,

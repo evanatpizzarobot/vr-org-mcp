@@ -50,6 +50,23 @@ export function sanitizeString(
   return out;
 }
 
+const MAX_REFLECTED_LEN = 120;
+
+/**
+ * Narrow hygiene for a caller-supplied identifier that gets echoed back into a
+ * tool message, resource text, or prompt (a query, slug, topic, or headset name
+ * that did not match). Strips angle brackets so no caller markup is reflected
+ * verbatim, and caps the echo length. Runs in addition to the general output
+ * sanitizer above; a valid identifier passes through unchanged.
+ */
+export function sanitizeReflectedValue(input: unknown): string {
+  if (typeof input !== "string") return "";
+  const stripped = input.replace(/[<>]/g, "");
+  return stripped.length > MAX_REFLECTED_LEN
+    ? stripped.slice(0, MAX_REFLECTED_LEN - 1) + "\u2026"
+    : stripped;
+}
+
 /**
  * Walks an object/array tree and sanitizes every string. Numbers,
  * booleans, null pass through. Bigints convert to strings since they

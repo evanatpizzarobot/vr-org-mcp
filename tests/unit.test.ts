@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeString, sanitizeValue } from "../src/security/sanitize.js";
+import { sanitizeString, sanitizeValue, sanitizeReflectedValue } from "../src/security/sanitize.js";
 import { enforceResponseCap } from "../src/security/limits.js";
 import {
   requireSlug,
@@ -72,6 +72,28 @@ describe("sanitize", () => {
   it("walks nested structures", () => {
     const v = sanitizeValue({ a: "ok", b: [1, "two​"], c: 3 });
     expect(v).toEqual({ a: "ok", b: [1, "two"], c: 3 });
+  });
+});
+
+describe("sanitizeReflectedValue", () => {
+  it("strips angle brackets from reflected caller input", () => {
+    expect(sanitizeReflectedValue("<script>alert(1)</script>")).toBe("scriptalert(1)/script");
+  });
+
+  it("leaves a normal identifier unchanged", () => {
+    expect(sanitizeReflectedValue("anthropic")).toBe("anthropic");
+  });
+
+  it("caps an over-long value at 120 chars ending in an ellipsis", () => {
+    const out = sanitizeReflectedValue("a".repeat(500));
+    expect(out.length).toBe(120);
+    expect(out.charCodeAt(119)).toBe(0x2026);
+  });
+
+  it("returns an empty string for non-string input", () => {
+    expect(sanitizeReflectedValue(undefined)).toBe("");
+    expect(sanitizeReflectedValue(42)).toBe("");
+    expect(sanitizeReflectedValue(null)).toBe("");
   });
 });
 
