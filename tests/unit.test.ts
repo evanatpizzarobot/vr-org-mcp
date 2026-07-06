@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeString, sanitizeValue, sanitizeReflectedValue } from "../src/security/sanitize.js";
+import {
+  sanitizeString,
+  sanitizeValue,
+  sanitizeReflectedValue,
+  sanitizeErrorText,
+} from "../src/security/sanitize.js";
 import { enforceResponseCap } from "../src/security/limits.js";
 import {
   requireSlug,
@@ -94,6 +99,53 @@ describe("sanitizeReflectedValue", () => {
     expect(sanitizeReflectedValue(undefined)).toBe("");
     expect(sanitizeReflectedValue(42)).toBe("");
     expect(sanitizeReflectedValue(null)).toBe("");
+  });
+});
+
+describe("sanitizeErrorText", () => {
+  it("redacts a caller-supplied secret", () => {
+    const out = sanitizeErrorText("connect failed for supersecretvalue123", [
+      "supersecretvalue123",
+    ]);
+    expect(out).not.toContain("supersecretvalue123");
+    expect(out).toContain("[redacted]");
+  });
+
+  it("redacts token-shaped strings even when no secret is passed", () => {
+    // Assemble the token at runtime so no secret-shaped literal sits in source
+    // (keeps the pre-commit scan and GitHub push protection quiet on a fixture).
+    const key = ["sk", "ant", "api03", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"].join("-");
+    const out = sanitizeErrorText(`upstream leaked ${key} in body`);
+    expect(out).not.toContain(key);
+    expect(out).toContain("sk-ant-[redacted]");
+  });
+
+  it("applies the role-token scrub to a bearer token", () => {
+    const out = sanitizeErrorText("auth error: Bearer AbCdEf0123456789GhIjKl expired");
+    expect(out).not.toContain("AbCdEf0123456789GhIjKl");
+    expect(out).toContain("Bearer [redacted]");
+  });
+
+  it("ignores undefined and too-short secrets", () => {
+    const out = sanitizeErrorText("value is abc and nothing else", [undefined, "abc"]);
+    expect(out).toBe("value is abc and nothing else");
+  });
+
+  it("caps a 50k message at 4000 chars ending in the truncation marker", () => {
+    const out = sanitizeErrorText("y".repeat(50_000));
+    expect(out.length).toBeLessThanOrEqual(4000);
+    expect(out.endsWith("[truncated]")).toBe(true);
+  });
+
+  it("leaves a normal message unchanged", () => {
+    expect(sanitizeErrorText("upstream /api/feed returned 500")).toBe(
+      "upstream /api/feed returned 500",
+    );
+  });
+
+  it("returns an empty string for empty or non-string input", () => {
+    expect(sanitizeErrorText("")).toBe("");
+    expect(sanitizeErrorText(undefined)).toBe("");
   });
 });
 

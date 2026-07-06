@@ -105,13 +105,14 @@ VR.org's editorial is controlled, but the live feed also carries third-party RSS
 1. **Sanitized.** Control characters and zero-width / direction-override characters are stripped from every string.
 2. **Capped.** Serialized responses are limited to 50 KB so a large payload cannot flood the agent's context window.
 
-Inputs are validated before any outbound request, and errors are returned as structured, non-echoing objects rather than raw stack traces.
+Inputs are validated before any outbound request and every free-text parameter is length-capped at the schema layer. Errors are returned as structured, non-echoing objects rather than raw stack traces; on the rare path where an error string reaches the caller it runs through the same output scrub as a tool result, with any credential-shaped substring redacted and the text capped, and is flagged with `isError`.
 
 ## Configuration
 
+The API base URL is fixed to `https://vr.org` in source and cannot be overridden, so the server can only ever talk to VR.org.
+
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `VR_ORG_BASE_URL` | `https://vr.org` | Override the base URL (only useful for staging) |
 | `VR_ORG_UA_SUFFIX` | _(none)_ | Optional suffix appended to the outbound User-Agent |
 
 ## Development
@@ -123,6 +124,12 @@ npm run build      # compile to dist/
 npm test           # run the offline test suite
 npm run typecheck  # type-check without emitting
 ```
+
+## Changelog
+
+### 0.3.2
+
+Error-path hardening: tool errors now pass through the same output scrub as tool results, with secrets redacted and error text capped. All free-text parameters gain schema-level max lengths. No behavior change for valid inputs.
 
 ## License
 

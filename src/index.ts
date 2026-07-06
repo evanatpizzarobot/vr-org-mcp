@@ -44,7 +44,7 @@ import {
   explainVrTopicPrompt,
 } from "./prompts.js";
 import { safeRun } from "./security/errors.js";
-import { sanitizeValue, sanitizeString } from "./security/sanitize.js";
+import { sanitizeValue, sanitizeString, sanitizeErrorText } from "./security/sanitize.js";
 import { enforceResponseCap, MAX_RESPONSE_BYTES } from "./security/limits.js";
 import { PACKAGE_VERSION } from "./config.js";
 
@@ -65,14 +65,35 @@ const READ_ONLY = {
   openWorldHint: true,
 } as const;
 
+/**
+ * Literal secret values to redact from any error text before it reaches the
+ * calling model. vr-org-mcp holds no API key and attaches no auth token to any
+ * request, so there is nothing to redact and the list is empty; sanitizeErrorText
+ * still masks credential-shaped substrings defensively.
+ */
+const ERROR_SECRETS: string[] = [];
+
 function wrapTool<T extends Record<string, unknown>>(
   handler: (args: T) => Promise<unknown>,
 ) {
   return async (args: T) => {
-    const raw = await safeRun(async () => handler(args));
-    const sanitized = sanitizeValue(raw);
-    const serialized = enforceResponseCap(sanitized, MAX_RESPONSE_BYTES);
-    return { content: [{ type: "text" as const, text: serialized }] };
+    try {
+      const raw = await safeRun(async () => handler(args));
+      const sanitized = sanitizeValue(raw);
+      const serialized = enforceResponseCap(sanitized, MAX_RESPONSE_BYTES);
+      return { content: [{ type: "text" as const, text: serialized }] };
+    } catch (err) {
+      // safeRun already turns handler throws into structured, non-echoing
+      // results, so reaching here means the sanitize / serialize path itself
+      // failed. Return the error through the same output scrub as a tool
+      // result, with secrets and credential-shaped substrings redacted, and
+      // flag isError so the host knows the call did not succeed.
+      const raw = err instanceof Error ? err.message : String(err);
+      return {
+        content: [{ type: "text" as const, text: sanitizeErrorText(raw, ERROR_SECRETS) }],
+        isError: true as const,
+      };
+    }
   };
 }
 
@@ -86,8 +107,8 @@ server.registerTool(
     description:
       "Returns the latest VR, AR, and XR headlines from VR.org's live aggregated feed (8 VR-native sources plus filtered general tech). Optionally filter by category and match a keyword in the title or snippet.",
     inputSchema: {
-      query: z.string().optional().describe("Optional keyword to match in the title or snippet."),
-      category: z.string().optional().describe(CATEGORY_DESC),
+      query: z.string().max(500).optional().describe("Optional keyword to match in the title or snippet."),
+      category: z.string().max(100).optional().describe(CATEGORY_DESC),
       limit: z.number().optional().describe("Max results, 1-50 (default 20)."),
     },
     annotations: { ...READ_ONLY, title: "Search VR / AR / XR news" },
@@ -114,7 +135,7 @@ server.registerTool(
     description:
       "Returns summaries of VR.org's own editorial articles (original reporting, opinion, retrospectives, and guides), newest first. Optionally filter by category.",
     inputSchema: {
-      category: z.string().optional().describe(CATEGORY_DESC),
+      category: z.string().max(100).optional().describe(CATEGORY_DESC),
       limit: z.number().optional().describe("Max results, 1-50 (default 15)."),
     },
     annotations: { ...READ_ONLY, title: "List VR.org original articles" },
@@ -129,7 +150,7 @@ server.registerTool(
     description:
       "Returns the full content of a single VR.org original article by its slug: metadata (title, author, date, category, tags, snippet), the canonical URL, and the article body HTML.",
     inputSchema: {
-      slug: z.string().describe("The article slug, e.g. 'why-vr-is-the-perfect-horror-machine'."),
+      slug: z.string().max(200).describe("The article slug, e.g. 'why-vr-is-the-perfect-horror-machine'."),
     },
     annotations: { ...READ_ONLY, title: "Get a VR.org article by slug" },
   },
@@ -161,7 +182,7 @@ server.registerTool(
     description:
       "Returns VR.org's current curated product picks (headsets, accessories, AR glasses) with prices, badges, and retailer links. Optionally filter to one section.",
     inputSchema: {
-      section: z.string().optional().describe("Optional section filter, e.g. 'headsets'."),
+      section: z.string().max(200).optional().describe("Optional section filter, e.g. 'headsets'."),
     },
     annotations: { ...READ_ONLY, title: "Get VR product deals and prices" },
   },
@@ -175,8 +196,8 @@ server.registerTool(
     description:
       "Returns a side-by-side of two headsets (price, badge, description, retailer links) drawn from VR.org's curated catalog. Accepts partial names like 'Quest 3' or 'PSVR2'.",
     inputSchema: {
-      a: z.string().describe("First headset name (partial match allowed)."),
-      b: z.string().describe("Second headset name (partial match allowed)."),
+      a: z.string().max(200).describe("First headset name (partial match allowed)."),
+      b: z.string().max(200).describe("Second headset name (partial match allowed)."),
     },
     annotations: { ...READ_ONLY, title: "Compare two VR headsets" },
   },
@@ -225,7 +246,7 @@ server.registerTool(
     description:
       "Returns a canonical VR.org answer and the authoritative pillar-page link for a common VR / AR / XR question (for example 'what is vr', 'best headset', 'ar glasses', 'vr for beginners').",
     inputSchema: {
-      topic: z.string().describe("The topic or question, e.g. 'what is vr' or 'best vr headset'."),
+      topic: z.string().max(500).describe("The topic or question, e.g. 'what is vr' or 'best vr headset'."),
     },
     annotations: { ...READ_ONLY, title: "Explain a VR / AR / XR topic" },
   },
@@ -340,8 +361,8 @@ server.registerPrompt(
     title: "Recommend a VR headset",
     description: "Recommend a headset from VR.org's current picks, grounded in live deals and the buyer guide.",
     argsSchema: {
-      budget: z.string().optional().describe("Your budget, e.g. '$400' or 'under $1000'."),
-      use_case: z.string().optional().describe("Main use, e.g. 'PC VR gaming', 'fitness', 'movies'."),
+      budget: z.string().max(200).optional().describe("Your budget, e.g. '$400' or 'under $1000'."),
+      use_case: z.string().max(200).optional().describe("Main use, e.g. 'PC VR gaming', 'fitness', 'movies'."),
     },
   },
   ({ budget, use_case }) => ({
@@ -354,7 +375,7 @@ server.registerPrompt(
   {
     title: "This Week in VR",
     description: "Draft a concise weekly VR / AR / XR roundup from VR.org's news and originals.",
-    argsSchema: { category: z.string().optional().describe(CATEGORY_DESC) },
+    argsSchema: { category: z.string().max(100).optional().describe(CATEGORY_DESC) },
   },
   ({ category }) => ({
     messages: [{ role: "user", content: { type: "text", text: thisWeekInVrPrompt({ category }) } }],
@@ -366,7 +387,7 @@ server.registerPrompt(
   {
     title: "Explain a VR / AR / XR topic",
     description: "Explain a VR topic for a newcomer, grounded in VR.org's canonical answer and pillar page.",
-    argsSchema: { topic: z.string().describe("The topic, e.g. 'what is vr' or 'passthrough'.") },
+    argsSchema: { topic: z.string().max(500).describe("The topic, e.g. 'what is vr' or 'passthrough'.") },
   },
   ({ topic }) => ({
     messages: [{ role: "user", content: { type: "text", text: explainVrTopicPrompt({ topic }) } }],

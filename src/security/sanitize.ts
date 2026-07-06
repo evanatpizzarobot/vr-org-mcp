@@ -50,6 +50,59 @@ export function sanitizeString(
   return out;
 }
 
+const MAX_ERROR_CHARS = 4000;
+
+/**
+ * Credential-shaped substrings to mask if they ever surface inside an error
+ * string.
+ *
+ * vr-org-mcp is a read-only proxy: it holds no API key and attaches no auth
+ * token to any request (see src/http/client.ts), so unlike a keyed server there
+ * is no single project token to redact. This scrub is defense-in-depth. If a
+ * credential-shaped value ever reached an error message (a misconfigured
+ * environment, an upstream header echoed into a body), it is masked before the
+ * text is handed to the calling model. The patterns mirror the key shapes the
+ * studio already guards against (Anthropic, Google, Resend) plus bearer tokens.
+ */
+const TOKEN_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\bBearer\s+[A-Za-z0-9._~+/-]{16,}={0,2}/gi, "Bearer [redacted]"],
+  [/sk-ant-[A-Za-z0-9_-]{20,}/g, "sk-ant-[redacted]"],
+  [/AIza[0-9A-Za-z_-]{35}/g, "AIza[redacted]"],
+  [/re_[A-Za-z0-9_-]{20,}/g, "re_[redacted]"],
+];
+
+/**
+ * Scrub text destined for the calling model on the error path. A thrown error's
+ * message can carry attacker-controlled input (a malformed request, an upstream
+ * body), so it runs through the same output scrub as a tool result, with any
+ * caller-supplied secret and any credential-shaped substring redacted first, and
+ * the whole thing capped so a huge message cannot flood the agent's context.
+ *
+ * `secrets` is the list of literal secret values to redact (each masked only if
+ * it is a string of at least 8 characters, so a short or missing value is
+ * ignored). vr-org-mcp carries no secret, so callers pass an empty list; the
+ * parameter exists so the same helper is correct if a keyed surface reuses it.
+ */
+export function sanitizeErrorText(input: unknown, secrets: unknown[] = []): string {
+  if (typeof input !== "string" || input.length === 0) return "";
+  let s = input;
+  for (const secret of secrets) {
+    if (typeof secret === "string" && secret.length >= 8) {
+      s = s.split(secret).join("[redacted]");
+    }
+  }
+  for (const [pattern, replacement] of TOKEN_PATTERNS) {
+    s = s.replace(pattern, replacement);
+  }
+  // Run the same control / zero-width scrub tool results get. Pass an effectively
+  // unbounded cap so sanitizeString only strips characters; sanitizeErrorText
+  // owns the error-specific length cap below.
+  s = sanitizeString(s, Number.MAX_SAFE_INTEGER);
+  return s.length > MAX_ERROR_CHARS
+    ? s.slice(0, MAX_ERROR_CHARS - 15) + "\n...[truncated]"
+    : s;
+}
+
 const MAX_REFLECTED_LEN = 120;
 
 /**

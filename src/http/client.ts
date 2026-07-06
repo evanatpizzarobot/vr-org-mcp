@@ -32,6 +32,11 @@ export async function fetchJson(
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) {
+    // Deliberately do not read or embed the response body here. Keeping only the
+    // status and the request path means no upstream (potentially attacker
+    // controlled) text rides along in the error message. If a body snippet is
+    // ever added for diagnostics, JSON.stringify then slice it to ~1500 chars
+    // first so a large or hostile body cannot flood the caller.
     throw new UpstreamError(res.status, pathname);
   }
   return res.json();
