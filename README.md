@@ -1,5 +1,10 @@
 # vr-org-mcp
 
+[![npm version](https://img.shields.io/npm/v/vr-org-mcp)](https://www.npmjs.com/package/vr-org-mcp)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-org.vr%2Fvr--mcp-6E56CF)](https://registry.modelcontextprotocol.io/v0/servers?search=org.vr/vr-mcp)
+[![Install in Cursor](https://img.shields.io/badge/Cursor-Install%20MCP-111111)](https://cursor.com/en/install-mcp?name=vr-org&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsInZyLW9yZy1tY3AiXX0%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS%20Code-Install%20MCP-0098FF)](https://insiders.vscode.dev/redirect/mcp/install?name=vr-org&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22vr-org-mcp%22%5D%7D)
+
 Read-only [Model Context Protocol](https://modelcontextprotocol.io) server for **[VR.org](https://vr.org)**, a dedicated VR / AR / XR news publication and aggregator.
 
 It gives any MCP-compatible agent (Claude Desktop, Claude Code, Cursor, Continue, and others) one-call access to live VR, AR, and XR news, VR.org's original editorial (including full article text), the VR/AR/XR events calendar, curated headset deals, buyer-guide answers, and top-game and top-app lists.
@@ -15,6 +20,8 @@ npx vr-org-mcp
 ```
 
 ### Claude Desktop
+
+One-click: download [`vr-org-mcp-0.3.2.mcpb`](https://github.com/evanatpizzarobot/vr-org-mcp/releases/latest) and double-click it to install into Claude Desktop. Or configure manually:
 
 Add to your `claude_desktop_config.json`:
 
@@ -57,6 +64,8 @@ VR.org also runs the same tools as a remote server over MCP's streamable-HTTP tr
 ```
 https://vr.org/mcp
 ```
+
+Human setup walkthrough for every client: [vr.org/connect](https://vr.org/connect).
 
 ## Tools
 
