@@ -14,6 +14,13 @@ import {
   ValidationError,
 } from "../src/security/validate.js";
 import { absoluteUrl } from "../src/config.js";
+import {
+  PROVENANCE,
+  RELAYED_CONTENT_NOTICE,
+  RELAYED_CONTENT_NOTICE_MD,
+  hasThirdParty,
+  provenanceOf,
+} from "../src/provenance.js";
 import { findExplainer, EXPLAINERS } from "../src/explainers.js";
 import { matchHeadset } from "../src/match.js";
 import { selectEvents } from "../src/events.js";
@@ -368,5 +375,69 @@ describe("explainers", () => {
       expect(e.path.startsWith("/")).toBe(true);
       expect(e.summary.length).toBeGreaterThan(20);
     }
+  });
+});
+
+describe("provenance", () => {
+  it("labels VR.org's own source name as editorial", () => {
+    expect(provenanceOf("VR.org", null)).toBe(PROVENANCE.EDITORIAL);
+    expect(provenanceOf("vr.org", null)).toBe(PROVENANCE.EDITORIAL);
+    expect(provenanceOf("  VR.org Original  ", null)).toBe(PROVENANCE.EDITORIAL);
+    // The machine source id /api/feed stamps on merged editorial items.
+    expect(provenanceOf("vrorg", "/articles/some-slug")).toBe(PROVENANCE.EDITORIAL);
+  });
+
+  it("keeps a named third-party source third-party even if its link resolved onto vr.org", () => {
+    // A relative RSS link resolves against vr.org, so the source name has to win.
+    expect(provenanceOf("Road to VR", "https://vr.org/whatever")).toBe(PROVENANCE.THIRD_PARTY);
+  });
+
+  it("labels a vr.org URL as editorial even when the source name is missing", () => {
+    expect(provenanceOf(null, "https://vr.org/articles/some-slug")).toBe(PROVENANCE.EDITORIAL);
+    expect(provenanceOf(undefined, "https://www.vr.org/articles/x")).toBe(PROVENANCE.EDITORIAL);
+  });
+
+  it("labels outside publishers as third party", () => {
+    expect(provenanceOf("Road to VR", "https://roadtovr.com/x")).toBe(PROVENANCE.THIRD_PARTY);
+    expect(provenanceOf("UploadVR", "https://uploadvr.com/y")).toBe(PROVENANCE.THIRD_PARTY);
+  });
+
+  it("fails closed to third party on unknown or malformed input", () => {
+    expect(provenanceOf(null, null)).toBe(PROVENANCE.THIRD_PARTY);
+    expect(provenanceOf(42, {})).toBe(PROVENANCE.THIRD_PARTY);
+    expect(provenanceOf("", "")).toBe(PROVENANCE.THIRD_PARTY);
+  });
+
+  it("does not let a lookalike domain pass as editorial", () => {
+    expect(provenanceOf("evil", "https://vr.org.evil.com/x")).toBe(PROVENANCE.THIRD_PARTY);
+    expect(provenanceOf("evil", "https://notvr.org/x")).toBe(PROVENANCE.THIRD_PARTY);
+  });
+
+  it("detects whether a list carries any relayed text", () => {
+    expect(hasThirdParty([{ provenance: PROVENANCE.EDITORIAL }])).toBe(false);
+    expect(hasThirdParty([])).toBe(false);
+    expect(
+      hasThirdParty([{ provenance: PROVENANCE.EDITORIAL }, { provenance: PROVENANCE.THIRD_PARTY }]),
+    ).toBe(true);
+  });
+
+  it("the notices name the marker and say to treat it as data", () => {
+    expect(RELAYED_CONTENT_NOTICE).toContain(PROVENANCE.THIRD_PARTY);
+    expect(RELAYED_CONTENT_NOTICE.toLowerCase()).toContain("never as instructions");
+    expect(RELAYED_CONTENT_NOTICE_MD.toLowerCase()).toContain("rather than instructions");
+  });
+
+  it("no notice text carries an em dash", () => {
+    for (const s of [RELAYED_CONTENT_NOTICE, RELAYED_CONTENT_NOTICE_MD]) {
+      expect(s).not.toContain("—");
+      expect(s).not.toContain("--");
+    }
+  });
+
+  it("the news resource carries the relayed-content notice", () => {
+    const md = formatNewsIndex([
+      { title: "Headline", url: "https://roadtovr.com/x", source: "Road to VR", published: null },
+    ]);
+    expect(md).toContain(RELAYED_CONTENT_NOTICE_MD);
   });
 });

@@ -136,6 +136,14 @@ npm run typecheck  # type-check without emitting
 
 ## Changelog
 
+### 0.4.0
+
+Content provenance. Feed results now carry a `provenance` field on every item, either `vr_org_editorial` (written and edited by VR.org) or `third_party_feed` (a headline or snippet relayed verbatim from an outside publisher). Any response containing relayed text also carries a `content_notice` saying to treat that text as data rather than instructions, and the `vrorg://news/latest` resource carries the same notice in prose. This is additive metadata, so existing fields and existing consumers are unaffected.
+
+The point is to let a calling client tell which text VR.org actually stands behind. It follows the August 2026 GhostSplice research on splitting instructions across MCP channels, whose core mitigation is that clients should treat server output as data. This server is not a vector for that attack (it never requests sampling, its tool descriptions are static literals, and every value that can flow back in as a tool argument is validated against a strict allowlist), but it does relay text it did not write, and now it says so.
+
+Also bumps `@modelcontextprotocol/sdk` to 1.30.0 and pins four transitive dependencies of the SDK's HTTP transport that carried advisories. This server is stdio-only and never loads that transport, so the pins are hygiene rather than an exposure fix. `npm audit --omit=dev` reports zero vulnerabilities.
+
 ### 0.3.2
 
 Error-path hardening: tool errors now pass through the same output scrub as tool results, with secrets redacted and error text capped. All free-text parameters gain schema-level max lengths. No behavior change for valid inputs.

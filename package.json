@@ -1,6 +1,6 @@
 {
   "name": "vr-org-mcp",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "mcpName": "org.vr/vr-mcp",
   "description": "Read-only MCP server for VR.org. Gives AI agents one-call access to live VR, AR, and XR news, original editorial with full article text, the events calendar, headset deals, buyer guides, and top-game and top-app lists.",
   "type": "module",
@@ -51,7 +51,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
@@ -59,6 +59,12 @@
     "tsx": "^4.7.0",
     "typescript": "^5.4.0",
     "vitest": "^1.4.0"
+  },
+  "overrides": {
+    "hono": "^4.13.1",
+    "@hono/node-server": "^2.0.5",
+    "ip-address": "^10.5.0",
+    "fast-uri": "^3.1.5"
   },
   "publishConfig": {
     "access": "public",

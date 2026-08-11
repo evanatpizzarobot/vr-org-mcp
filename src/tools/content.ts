@@ -15,6 +15,12 @@ import {
 } from "../security/validate.js";
 import { UpstreamError } from "../security/errors.js";
 import { sanitizeReflectedValue } from "../security/sanitize.js";
+import {
+  PROVENANCE,
+  RELAYED_CONTENT_NOTICE,
+  hasThirdParty,
+  provenanceOf,
+} from "../provenance.js";
 import { EXPLAINERS, findExplainer } from "../explainers.js";
 import { matchHeadset } from "../match.js";
 import { selectEvents } from "../events.js";
@@ -45,15 +51,20 @@ interface RawArticle {
 }
 
 function mapFeedArticle(a: RawArticle) {
+  const source = a.sourceName ?? a.source ?? null;
+  const url = absoluteUrl(a.link);
   return {
     title: a.title ?? null,
-    source: a.sourceName ?? a.source ?? null,
-    url: absoluteUrl(a.link),
+    source,
+    url,
     author: a.author ?? null,
     published: a.pubDate ?? null,
     category: a.category ?? null,
     tags: Array.isArray(a.tags) ? a.tags : [],
     snippet: a.snippet ?? null,
+    // Title and snippet on a third-party item are relayed text VR.org did not
+    // write. See src/provenance.ts for why this label is here.
+    provenance: provenanceOf(source, url),
   };
 }
 
@@ -69,6 +80,9 @@ function mapOriginal(a: RawArticle) {
     category: a.category ?? null,
     tags: Array.isArray(a.tags) ? a.tags : [],
     snippet: a.snippet ?? null,
+    // Originals are always VR.org's own work. Stated rather than implied so the
+    // two provenance values form one vocabulary a client can rely on.
+    provenance: PROVENANCE.EDITORIAL,
   };
 }
 
@@ -103,6 +117,9 @@ export async function search_vr_news(args: {
     count: items.length,
     last_updated: data?.meta?.lastUpdated ?? null,
     articles: items,
+    // Only attached when the payload actually carries relayed text, so the
+    // notice stays a signal instead of boilerplate on every response.
+    ...(hasThirdParty(items) ? { content_notice: RELAYED_CONTENT_NOTICE } : {}),
     source: HOMEPAGE,
   };
 }
@@ -113,10 +130,15 @@ export async function get_vr_trending() {
   const data = (await cached("trending", TTL.TRENDING, () =>
     fetchJson("/api/trending"),
   )) as { topics?: unknown[]; updatedAt?: string };
+  const topics = Array.isArray(data?.topics) ? data.topics : [];
   return {
     ok: true as const,
     updated_at: data?.updatedAt ?? null,
-    topics: Array.isArray(data?.topics) ? data.topics : [],
+    topics,
+    // Trending terms are extracted from third-party headline text, so the whole
+    // list inherits that provenance rather than being marked per item.
+    provenance: PROVENANCE.THIRD_PARTY,
+    ...(topics.length > 0 ? { content_notice: RELAYED_CONTENT_NOTICE } : {}),
     source: HOMEPAGE,
   };
 }

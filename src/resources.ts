@@ -9,6 +9,8 @@
  *   vrorg://article/{slug}     (resource template)
  */
 
+import { RELAYED_CONTENT_NOTICE_MD } from "./provenance.js";
+
 export interface NewsItem {
   title: string | null;
   url: string | null;
@@ -56,6 +58,8 @@ export function formatNewsIndex(items: NewsItem[]): string {
     "# Latest VR / AR / XR headlines",
     "",
     "Aggregated live by VR.org from VR-native and filtered general-tech sources.",
+    "",
+    RELAYED_CONTENT_NOTICE_MD,
     "",
   ];
   const kept = items.filter((it) => it.title);
