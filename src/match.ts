@@ -19,7 +19,9 @@ const ALIASES: Array<[RegExp, string]> = [
   [/^avp$|^vision\s*pro$/i, "apple vision pro"],
   [/^galaxy\s*xr$|^moohan$/i, "samsung galaxy xr"],
   [/^beyond\s*2?$/i, "bigscreen beyond"],
-  [/^pimax/i, "pimax crystal"],
+  // Bare "pimax" only. A prefix match here used to turn "Pimax Dream Air SE"
+  // into "pimax crystal" and return the wrong headset.
+  [/^pimax$/i, "pimax crystal"],
   [/^vive\s*xr/i, "htc vive xr"],
 ];
 

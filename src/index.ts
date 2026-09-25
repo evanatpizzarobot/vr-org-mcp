@@ -105,7 +105,7 @@ server.registerTool(
   {
     title: "Search VR / AR / XR news",
     description:
-      "Returns the latest VR, AR, and XR headlines from VR.org's live aggregated feed (8 VR-native sources plus filtered general tech). Optionally filter by category and match a keyword in the title or snippet.",
+      "Returns the latest VR, AR, and XR headlines from VR.org's live aggregated feed (VR-native sources plus filtered general tech). Optionally filter by category and match a keyword in the title or snippet.",
     inputSchema: {
       query: z.string().max(500).optional().describe("Optional keyword to match in the title or snippet."),
       category: z.string().max(100).optional().describe(CATEGORY_DESC),

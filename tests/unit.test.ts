@@ -63,6 +63,11 @@ describe("matchHeadset", () => {
   it("returns null when nothing matches", () => {
     expect(matchHeadset(CATALOG, "HoloLens")).toBeNull();
   });
+  it("does not rewrite a full Pimax model name to the Crystal", () => {
+    const pimax = ["Pimax Crystal Light", "Pimax Dream Air SE"];
+    expect(pimax[matchHeadset(pimax, "Pimax Dream Air SE")!]).toBe("Pimax Dream Air SE");
+    expect(pimax[matchHeadset(pimax, "pimax")!]).toBe("Pimax Crystal Light");
+  });
 });
 
 describe("sanitize", () => {
@@ -84,6 +89,17 @@ describe("sanitize", () => {
   it("walks nested structures", () => {
     const v = sanitizeValue({ a: "ok", b: [1, "two​"], c: 3 });
     expect(v).toEqual({ a: "ok", b: [1, "two"], c: 3 });
+  });
+});
+
+describe("sanitizeValue body_html cap", () => {
+  it("leaves a full-length article body_html intact but still caps other strings", () => {
+    const body = "<p>" + "x".repeat(17_000) + "</p>";
+    const v = sanitizeValue({ article: { body_html: body, snippet: "y".repeat(5000) } }) as {
+      article: { body_html: string; snippet: string };
+    };
+    expect(v.article.body_html).toBe(body);
+    expect(v.article.snippet.endsWith("...[truncated]")).toBe(true);
   });
 });
 
@@ -367,6 +383,14 @@ describe("explainers", () => {
   });
   it("returns null for unrelated topics", () => {
     expect(findExplainer("how to bake bread")).toBeNull();
+  });
+  it("does not match very short topics inside longer keys", () => {
+    for (const t of ["vr", "3", "xr", "e"]) expect(findExplainer(t)).toBeNull();
+  });
+  it("still matches plurals and longer phrasings", () => {
+    expect(findExplainer("best headsets")?.path).toBe("/best-vr-headsets");
+    expect(findExplainer("beginners guide")?.path).toBe("/vr-for-beginners");
+    expect(findExplainer("psvr2 vs quest 3?")?.path).toBe("/psvr2-vs-quest-3");
   });
   it("every explainer has keys, title, path, summary", () => {
     for (const e of EXPLAINERS) {

@@ -21,7 +21,7 @@ npx vr-org-mcp
 
 ### Claude Desktop
 
-One-click: download [`vr-org-mcp-0.3.2.mcpb`](https://github.com/evanatpizzarobot/vr-org-mcp/releases/latest) and double-click it to install into Claude Desktop. Or configure manually:
+One-click: download the `.mcpb` bundle from the [latest release](https://github.com/evanatpizzarobot/vr-org-mcp/releases/latest) and double-click it to install into Claude Desktop. Or configure manually:
 
 Add to your `claude_desktop_config.json`:
 
@@ -135,6 +135,17 @@ npm run typecheck  # type-check without emitting
 ```
 
 ## Changelog
+
+### 0.4.1
+
+Fixes from a September 2026 audit, matched on the hosted endpoint at vr.org/mcp.
+
+- `get_vr_article` now returns the whole article. `body_html` was cut at the general 4,096-character string cap, which truncated most articles mid-tag while still reporting `ok: true`. It now has its own 45,000-character cap, and the 50 KB response cap still applies. The article also carries `updated`, the date a correction was applied, which the hosted endpoint already returned.
+- `vr_explain` no longer answers short topics with the wrong guide. A topic like "vr" or "3" used to match inside a longer key and return "PSVR2 vs Quest 3" with confidence; the reverse match now needs four or more characters starting on a word boundary.
+- `compare_vr_headsets` matches "Pimax Dream Air SE" correctly. The `pimax` alias was a prefix match that rewrote every Pimax query to Crystal.
+- Reading `vrorg://news/latest` no longer shrinks keyword search to 25 items for the next minute (the two shared a cache key with different request sizes).
+- A malformed slug in `vrorg://article/{slug}` now says "not found" instead of "temporarily unavailable, retry shortly".
+- Refreshed transitive dependency pins (hono, fast-uri, qs) for `npm audit`.
 
 ### 0.4.0
 

@@ -88,15 +88,29 @@ export const EXPLAINERS: Explainer[] = [
   },
 ];
 
+// True when `needle` occurs in `hay` starting at a word boundary.
+function startsAtWord(hay: string, needle: string): boolean {
+  for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + 1)) {
+    if (i === 0 || !/[a-z0-9]/.test(hay[i - 1] ?? "")) return true;
+  }
+  return false;
+}
+
+/**
+ * A key found inside the topic wins, longest key first. The reverse (topic
+ * found inside a key) is a weak fallback that needs 4+ chars starting on a
+ * word boundary, so "vr" or "3" no longer land confidently on "PSVR2 vs
+ * Quest 3". Kept identical to the remote endpoint's findExplainerMatch.
+ */
 export function findExplainer(topic: string): Explainer | null {
   const q = topic.toLowerCase();
   let best: { e: Explainer; score: number } | null = null;
   for (const e of EXPLAINERS) {
     for (const k of e.keys) {
-      if (q.includes(k) || k.includes(q)) {
-        const score = k.length;
-        if (!best || score > best.score) best = { e, score };
-      }
+      let score = 0;
+      if (q.includes(k)) score = 1000 + k.length;
+      else if (q.length >= 4 && startsAtWord(k, q)) score = 1;
+      if (score > 0 && (!best || score > best.score)) best = { e, score };
     }
   }
   return best ? best.e : null;

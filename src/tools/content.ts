@@ -12,6 +12,7 @@ import {
   optionalString,
   requireSlug,
   requireString,
+  ValidationError,
 } from "../security/validate.js";
 import { UpstreamError } from "../security/errors.js";
 import { sanitizeReflectedValue } from "../security/sanitize.js";
@@ -170,11 +171,11 @@ export async function get_vr_article(args: { slug?: unknown }) {
   const slug = requireSlug(args.slug);
   await rateLimit("get_vr_article");
 
-  let data: { article?: RawArticle & { body?: string } };
+  let data: { article?: RawArticle & { body?: string; updatedDate?: string | null } };
   try {
     data = (await cached(`article:${slug}`, TTL.ARTICLES, () =>
       fetchJson("/api/articles", { slug }),
-    )) as { article?: RawArticle & { body?: string } };
+    )) as { article?: RawArticle & { body?: string; updatedDate?: string | null } };
   } catch (err) {
     if (err instanceof UpstreamError && err.status === 404) {
       return {
@@ -198,7 +199,9 @@ export async function get_vr_article(args: { slug?: unknown }) {
   }
   return {
     ok: true as const,
-    article: { ...mapOriginal(match), body_html: match.body ?? null },
+    // `updated` carries updatedDate, which is set when a correction is applied.
+    // The remote endpoint already returned it.
+    article: { ...mapOriginal(match), updated: match.updatedDate ?? null, body_html: match.body ?? null },
     source: HOMEPAGE,
   };
 }
@@ -381,8 +384,11 @@ export async function list_vr_sources() {
 
 /** vrorg://news/latest : markdown index of the latest aggregated headlines. */
 export async function resource_news_latest(): Promise<string> {
+  // Same request as search_vr_news under the same cache key. This used to fetch
+  // limit 25 under "feed:all", so a resource read left keyword search covering
+  // only 25 items until the cache expired.
   const data = (await cached("feed:all", TTL.FEED, () =>
-    fetchJson("/api/feed", { category: "all", limit: 25 }),
+    fetchJson("/api/feed", { category: "all", limit: 200 }),
   )) as { articles?: RawArticle[] };
   const items = (Array.isArray(data?.articles) ? data.articles : []).slice(0, 25).map(mapFeedArticle);
   return formatNewsIndex(items);
@@ -416,10 +422,17 @@ export function resource_guides(): string {
 
 /** vrorg://article/{slug} : full HTML body of one original by slug. */
 export async function resource_article(slug: string): Promise<string> {
-  const res = await get_vr_article({ slug });
-  if (!res.ok || !res.article) {
-    return `<p>Article "${sanitizeReflectedValue(slug)}" was not found. List available articles via the vrorg://originals/latest resource.</p>`;
+  const notFound = `<p>Article "${sanitizeReflectedValue(slug)}" was not found. List available articles via the vrorg://originals/latest resource.</p>`;
+  let res: Awaited<ReturnType<typeof get_vr_article>>;
+  try {
+    res = await get_vr_article({ slug });
+  } catch (err) {
+    // A malformed slug can never resolve, so answer "not found" rather than
+    // letting index.ts report it as a transient "retry shortly" failure.
+    if (err instanceof ValidationError) return notFound;
+    throw err;
   }
+  if (!res.ok || !res.article) return notFound;
   const a = res.article;
   return formatArticle({
     title: a.title,

@@ -126,11 +126,19 @@ export function sanitizeReflectedValue(input: unknown): string {
  * are not JSON-serializable. Unsupported types collapse to a placeholder
  * rather than throw, so a single weird value cannot fail the whole
  * response.
+ *
+ * `body_html` gets its own cap. Article bodies run to ~17K chars, so the
+ * default per-string cap cut most of them mid-tag; the 50 KB response cap
+ * still bounds the whole payload.
  */
-export function sanitizeValue(input: unknown, depth = 0): unknown {
+export const MAX_BODY_HTML = 45_000;
+
+export function sanitizeValue(input: unknown, depth = 0, key?: string): unknown {
   if (depth > 32) return "[max-depth-exceeded]";
   if (input === null || input === undefined) return null;
-  if (typeof input === "string") return sanitizeString(input);
+  if (typeof input === "string") {
+    return sanitizeString(input, key === "body_html" ? MAX_BODY_HTML : DEFAULT_MAX_STRING);
+  }
   if (typeof input === "number" || typeof input === "boolean") return input;
   if (typeof input === "bigint") return input.toString();
   if (Array.isArray(input)) {
@@ -141,7 +149,7 @@ export function sanitizeValue(input: unknown, depth = 0): unknown {
     let count = 0;
     for (const [k, v] of Object.entries(input)) {
       if (count >= 200) break;
-      out[sanitizeString(k, 128)] = sanitizeValue(v, depth + 1);
+      out[sanitizeString(k, 128)] = sanitizeValue(v, depth + 1, k);
       count++;
     }
     return out;
