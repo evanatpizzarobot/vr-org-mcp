@@ -22,7 +22,7 @@ import {
   hasThirdParty,
   provenanceOf,
 } from "../provenance.js";
-import { EXPLAINERS, findExplainer } from "../explainers.js";
+import { EXPLAINERS, findExplainer, parseExplainers, type Explainer } from "../explainers.js";
 import { matchHeadset } from "../match.js";
 import { selectEvents } from "../events.js";
 import {
@@ -380,6 +380,35 @@ export async function list_vr_sources() {
   };
 }
 
+// Explainers, shared by vr_explain and the vrorg://guides resource.
+
+const EXPLAINERS_KEY = "explainers";
+const NO_EXPLAINERS: Explainer[] = [];
+
+/**
+ * The explainer list behind vr_explain and vrorg://guides. Fetched from
+ * /api/explainers the way deals and events are, so a pillar-page refresh on the
+ * site shows up here without a package release, then validated entry by entry
+ * (see parseExplainers). When the fetch fails or nothing in it is usable, the
+ * built-in list answers instead. This never throws.
+ */
+export async function loadExplainers(): Promise<Explainer[]> {
+  try {
+    const list = await cached(EXPLAINERS_KEY, TTL.EXPLAINERS, async () => {
+      const parsed = parseExplainers(await fetchJson("/api/explainers"));
+      if (parsed.length === 0) throw new Error("no usable explainers");
+      return parsed;
+    });
+    if (list.length > 0) return list;
+  } catch {
+    // cached() stores nothing when its loader throws, so remember the miss for
+    // a short while. Without this, every call during an outage would wait out
+    // its own request timeout before reaching the built-in list.
+    await cached(EXPLAINERS_KEY, TTL.EXPLAINERS_RETRY, async () => NO_EXPLAINERS);
+  }
+  return EXPLAINERS;
+}
+
 // ---------- resource content (read by the MCP resources registered in index.ts) ----------
 
 /** vrorg://news/latest : markdown index of the latest aggregated headlines. */
@@ -414,9 +443,10 @@ export async function resource_events_upcoming(): Promise<string> {
 }
 
 /** vrorg://guides : VR.org's canonical pillar-guide answers in one doc. */
-export function resource_guides(): string {
+export async function resource_guides(): Promise<string> {
+  const explainers = await loadExplainers();
   return formatGuidesDoc(
-    EXPLAINERS.map((e) => ({ title: e.title, summary: e.summary, url: `${BASE_URL}${e.path}` })),
+    explainers.map((e) => ({ title: e.title, summary: e.summary, url: `${BASE_URL}${e.path}` })),
   );
 }
 
@@ -458,14 +488,16 @@ export async function resource_article_list(): Promise<Array<{ slug: string; tit
 /** vr_explain: a canonical VR.org answer + pillar link for a topic. */
 export async function vr_explain(args: { topic?: unknown }) {
   const topic = requireString(args.topic, "topic", 120);
-  const hit = findExplainer(topic);
+  await rateLimit("vr_explain");
+  const explainers = await loadExplainers();
+  const hit = findExplainer(topic, explainers);
   if (!hit) {
     return {
       ok: false as const,
       error: "no_explainer",
       topic: sanitizeReflectedValue(topic),
-      available_topics: EXPLAINERS.map((e) => e.title),
-      hint: "Try a broader topic like 'what is vr', 'best headset', or 'ar glasses'.",
+      available_topics: explainers.map((e) => e.title),
+      hint: "Try 'what is vr', 'best headset', 'steam frame', or 'ar glasses'.",
     };
   }
   return {

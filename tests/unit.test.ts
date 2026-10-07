@@ -1,11 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   sanitizeString,
   sanitizeValue,
   sanitizeReflectedValue,
   sanitizeErrorText,
 } from "../src/security/sanitize.js";
-import { enforceResponseCap } from "../src/security/limits.js";
+import { enforceResponseCap, MAX_RESPONSE_BYTES } from "../src/security/limits.js";
 import {
   requireSlug,
   optionalCategory,
@@ -21,7 +21,9 @@ import {
   hasThirdParty,
   provenanceOf,
 } from "../src/provenance.js";
-import { findExplainer, EXPLAINERS } from "../src/explainers.js";
+import { findExplainer, parseExplainers, EXPLAINERS } from "../src/explainers.js";
+import { vr_explain, resource_guides, loadExplainers } from "../src/tools/content.js";
+import { _resetCache } from "../src/http/client.js";
 import { matchHeadset } from "../src/match.js";
 import { selectEvents } from "../src/events.js";
 import {
@@ -463,5 +465,438 @@ describe("provenance", () => {
       { title: "Headline", url: "https://roadtovr.com/x", source: "Road to VR", published: null },
     ]);
     expect(md).toContain(RELAYED_CONTENT_NOTICE_MD);
+  });
+});
+
+// The three orderings the 0.4.2 list has to get right. Each topic contains a
+// shorter key that belongs to a different page, so only longest-key-wins gives
+// the right answer.
+const PRECEDENCE: Array<{ topic: string; want: string; not: string }> = [
+  { topic: "steam frame price", want: "/steam-frame-price", not: "/steam-frame" },
+  { topic: "steam frame vs quest 3", want: "/steam-frame-vs-quest-3", not: "/psvr2-vs-quest-3" },
+  { topic: "best vr headset for movies", want: "/best-vr-headset-for-movies", not: "/best-vr-headsets" },
+];
+
+describe("explainers: built-in list", () => {
+  it("routes the longer key ahead of the shorter one it contains", () => {
+    for (const { topic, want, not } of PRECEDENCE) {
+      const hit = findExplainer(topic);
+      expect(hit?.path, topic).toBe(want);
+      expect(hit?.path, topic).not.toBe(not);
+    }
+  });
+
+  it("still sends the bare product name to its hub page", () => {
+    expect(findExplainer("steam frame")?.path).toBe("/steam-frame");
+    expect(findExplainer("tell me about the Steam Frame")?.path).toBe("/steam-frame");
+    expect(findExplainer("best vr headset")?.path).toBe("/best-vr-headsets");
+  });
+
+  it("covers the topics that used to return no_explainer", () => {
+    expect(findExplainer("meta vr glasses")?.path).toBe("/meta-vr-glasses");
+    expect(findExplainer("How much is the Steam Frame?")?.path).toBe("/steam-frame-price");
+    expect(findExplainer("steam frame release date")?.path).toBe("/steam-frame-release-date");
+    expect(findExplainer("quest 4")?.path).toBe("/meta-quest-4");
+    expect(findExplainer("best vr horror games")?.path).toBe("/best-vr-horror-games");
+    expect(findExplainer("vr deals")?.path).toBe("/deals");
+  });
+
+  it("never files one key under two pages", () => {
+    const owner = new Map<string, string>();
+    for (const e of EXPLAINERS) {
+      for (const k of e.keys) {
+        expect(owner.get(k), `key "${k}"`).toBeUndefined();
+        owner.set(k, e.path);
+      }
+    }
+    expect(new Set(EXPLAINERS.map((e) => e.path)).size).toBe(EXPLAINERS.length);
+  });
+
+  it("passes the same validation a fetched list goes through", () => {
+    const asFeed = { explainers: EXPLAINERS.map((e) => ({ ...e, url: `https://vr.org${e.path}` })) };
+    expect(parseExplainers(asFeed)).toEqual(EXPLAINERS);
+  });
+
+  it("carries no em dash, en dash, or double hyphen", () => {
+    for (const e of EXPLAINERS) {
+      for (const s of [e.title, e.summary, ...e.keys]) {
+        expect(/[\u2013\u2014]|--/.test(s), s).toBe(false);
+      }
+    }
+  });
+});
+
+describe("parseExplainers", () => {
+  const good = {
+    keys: ["Steam Frame", "  valve frame  "],
+    title: "Valve Steam Frame",
+    summary: "A standalone and PC-streaming headset.",
+    url: "https://vr.org/steam-frame",
+    path: "/steam-frame",
+  };
+  const paths = (raw: unknown) => parseExplainers(raw).map((e) => e.path);
+
+  it("reads the /api/explainers shape and lowercases and trims the keys", () => {
+    expect(parseExplainers({ explainers: [good], count: 1 })).toEqual([
+      {
+        keys: ["steam frame", "valve frame"],
+        title: "Valve Steam Frame",
+        path: "/steam-frame",
+        summary: "A standalone and PC-streaming headset.",
+      },
+    ]);
+  });
+
+  it("also reads a bare array", () => {
+    expect(paths([good])).toEqual(["/steam-frame"]);
+  });
+
+  it("accepts an entry with only a url or only a path", () => {
+    const { path: _path, ...urlOnly } = good;
+    const { url: _url, ...pathOnly } = good;
+    expect(paths([urlOnly])).toEqual(["/steam-frame"]);
+    expect(paths([pathOnly])).toEqual(["/steam-frame"]);
+  });
+
+  it("takes the page from the url when url and path disagree", () => {
+    expect(paths([{ ...good, url: "https://vr.org/steam-frame-price", path: "/steam-frame" }])).toEqual([
+      "/steam-frame-price",
+    ]);
+  });
+
+  it("drops entries whose keys are not a non-empty array of non-empty strings", () => {
+    const badKeys: unknown[] = [
+      undefined,
+      "steam frame",
+      [],
+      ["steam frame", 7],
+      ["steam frame", ""],
+      ["steam frame", "   "],
+      ["\u200B\u200B"],
+      ["x".repeat(121)],
+      Array.from({ length: 51 }, (_, i) => `key ${i}`),
+    ];
+    for (const keys of badKeys) {
+      expect(parseExplainers([{ ...good, keys }]), JSON.stringify(keys)?.slice(0, 40)).toEqual([]);
+    }
+  });
+
+  it("drops entries with a missing or non-string title or summary", () => {
+    expect(parseExplainers([{ ...good, title: 42 }])).toEqual([]);
+    expect(parseExplainers([{ ...good, title: "   " }])).toEqual([]);
+    expect(parseExplainers([{ ...good, summary: null }])).toEqual([]);
+    expect(parseExplainers([{ ...good, summary: "" }])).toEqual([]);
+  });
+
+  it("drops entries that do not point at https://vr.org", () => {
+    const offSite = [
+      "https://evil.example/steam-frame",
+      "https://vr.org.evil.example/steam-frame",
+      "https://vr.org@evil.example/steam-frame",
+      "https://user:pass@vr.org/steam-frame",
+      "https://www.vr.org/steam-frame",
+      "http://vr.org/steam-frame",
+      "//evil.example/steam-frame",
+      "javascript:alert(1)",
+      "not a url",
+      `https://vr.org/${"a".repeat(600)}`,
+    ];
+    for (const url of offSite) {
+      // A valid path alongside does not rescue an entry whose url is wrong.
+      expect(parseExplainers([{ ...good, url }]), url.slice(0, 60)).toEqual([]);
+    }
+  });
+
+  it("drops entries with no usable url or path", () => {
+    const { url: _url, path: _path, ...neither } = good;
+    expect(parseExplainers([neither])).toEqual([]);
+    expect(parseExplainers([{ ...neither, path: "steam-frame" }])).toEqual([]);
+    expect(parseExplainers([{ ...neither, path: "//evil.example/x" }])).toEqual([]);
+    expect(parseExplainers([{ ...neither, url: 5, path: 9 }])).toEqual([]);
+  });
+
+  it("keeps the valid entries when their neighbours are bad", () => {
+    const mixed = [
+      null,
+      "nope",
+      42,
+      { ...good, url: "https://evil.example/x" },
+      good,
+      { ...good, keys: [] },
+      { ...good, keys: ["quest 4"], title: "Meta Quest 4", url: "https://vr.org/meta-quest-4" },
+    ];
+    expect(paths({ explainers: mixed })).toEqual(["/steam-frame", "/meta-quest-4"]);
+  });
+
+  it("returns an empty list for anything that is not a list of entries", () => {
+    for (const raw of [null, undefined, "x", 42, true, {}, { explainers: "nope" }, { explainers: {} }, []]) {
+      expect(parseExplainers(raw)).toEqual([]);
+    }
+  });
+
+  it("strips control and zero-width characters like other upstream text", () => {
+    const [e] = parseExplainers([
+      {
+        ...good,
+        keys: ["steam\u200B frame"],
+        title: "Valve\u202E Steam Frame",
+        summary: "Line one.\u0007 Line two.\uFEFF",
+      },
+    ]);
+    expect(e).toEqual({
+      keys: ["steam frame"],
+      title: "Valve Steam Frame",
+      path: "/steam-frame",
+      summary: "Line one. Line two.",
+    });
+  });
+
+  it("caps an over-long summary and an over-long list", () => {
+    const [long] = parseExplainers([{ ...good, summary: "y".repeat(5000) }]);
+    expect(long?.summary.length).toBe(1500);
+    expect(long?.summary.endsWith("...[truncated]")).toBe(true);
+    const many = Array.from({ length: 250 }, (_, i) => ({ ...good, keys: [`topic ${i}`] }));
+    expect(parseExplainers(many)).toHaveLength(200);
+  });
+});
+
+/** A fresh JSON Response per call, since a Response body can be read only once. */
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function stubFetch(respond: () => Response | Promise<Response>) {
+  const fetchMock = vi.fn(async (_url: unknown, _init?: unknown) => respond());
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+// The built-in list in the shape /api/explainers serves, with every summary
+// marked so a test can tell a fetched answer from a built-in one.
+const LIVE = "LIVE FEED: ";
+const liveFeed = () => ({
+  explainers: EXPLAINERS.map((e) => ({
+    keys: e.keys,
+    title: e.title,
+    summary: LIVE + e.summary,
+    url: `https://vr.org${e.path}`,
+    path: e.path,
+  })),
+  count: EXPLAINERS.length,
+});
+
+describe("vr_explain and vrorg://guides: fetched list", () => {
+  beforeEach(() => _resetCache());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("answers from /api/explainers through the shared client", async () => {
+    const fetchMock = stubFetch(() => jsonResponse(liveFeed()));
+    const res = await vr_explain({ topic: "steam frame" });
+    expect(res).toMatchObject({
+      ok: true,
+      title: "Valve Steam Frame",
+      url: "https://vr.org/steam-frame",
+      source: "https://vr.org",
+    });
+    expect(res.ok && res.summary.startsWith(LIVE)).toBe(true);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [URL, { method: string; headers: Record<string, string> }];
+    expect(String(url)).toBe("https://vr.org/api/explainers");
+    expect(init.method).toBe("GET");
+    expect(init.headers.Accept).toBe("application/json");
+    expect(init.headers["User-Agent"]).toContain("vr-org-mcp/");
+  });
+
+  it("keeps key precedence on the fetched list", async () => {
+    stubFetch(() => jsonResponse(liveFeed()));
+    for (const { topic, want, not } of PRECEDENCE) {
+      const res = await vr_explain({ topic });
+      expect(res.ok && res.url, topic).toBe(`https://vr.org${want}`);
+      expect(res.ok && res.url, topic).not.toBe(`https://vr.org${not}`);
+      expect(res.ok && res.summary.startsWith(LIVE), topic).toBe(true);
+    }
+  });
+
+  it("caches the list for ten minutes, then fetches again", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-07T12:00:00Z"));
+    const fetchMock = stubFetch(() => jsonResponse(liveFeed()));
+    await vr_explain({ topic: "steam frame" });
+    await vr_explain({ topic: "meta vr glasses" });
+    await resource_guides();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date("2026-10-07T12:09:59Z"));
+    await vr_explain({ topic: "steam frame" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date("2026-10-07T12:10:01Z"));
+    await vr_explain({ topic: "steam frame" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("serves a page the site added after this package was released", async () => {
+    const feed = liveFeed();
+    feed.explainers.push({
+      keys: ["pico space pro"],
+      title: "Pico Space Pro",
+      summary: "A page that exists only in the fetched list.",
+      url: "https://vr.org/pico-space-pro",
+      path: "/pico-space-pro",
+    });
+    stubFetch(() => jsonResponse(feed));
+    expect(findExplainer("pico space pro")).toBeNull();
+    expect(await vr_explain({ topic: "Pico Space Pro" })).toMatchObject({
+      ok: true,
+      title: "Pico Space Pro",
+      url: "https://vr.org/pico-space-pro",
+    });
+  });
+
+  it("uses the fetched list in place of the built-in one, not merged with it", async () => {
+    stubFetch(() =>
+      jsonResponse({
+        explainers: [
+          { keys: ["what is vr"], title: "What Is Virtual Reality?", summary: "Fetched.", url: "https://vr.org/what-is-vr" },
+        ],
+      }),
+    );
+    const res = await vr_explain({ topic: "steam frame" });
+    expect(res).toMatchObject({ ok: false, error: "no_explainer", topic: "steam frame" });
+    expect(!res.ok && res.available_topics).toEqual(["What Is Virtual Reality?"]);
+    expect(!res.ok && res.hint).toContain("'steam frame'");
+    expect(!res.ok && res.hint).not.toContain("passthrough");
+  });
+
+  it("drops invalid fetched entries and still answers from the valid ones", async () => {
+    stubFetch(() =>
+      jsonResponse({
+        explainers: [
+          { keys: ["steam frame"], title: "Spoofed", summary: "Off site.", url: "https://evil.example/steam-frame" },
+          { keys: [""], title: "Catch all", summary: "Empty key.", url: "https://vr.org/catch-all" },
+          { keys: ["Quest 4"], title: "Meta Quest 4", summary: "Fetched.", url: "https://vr.org/meta-quest-4" },
+        ],
+      }),
+    );
+    expect(await vr_explain({ topic: "quest 4" })).toMatchObject({ ok: true, url: "https://vr.org/meta-quest-4" });
+    expect(await vr_explain({ topic: "steam frame" })).toMatchObject({ ok: false, error: "no_explainer" });
+  });
+
+  it("builds the guides resource from the fetched list", async () => {
+    stubFetch(() => jsonResponse(liveFeed()));
+    const doc = await resource_guides();
+    expect(doc).toContain("# VR.org guides: canonical answers");
+    expect(doc).toContain("## Steam Frame Price");
+    expect(doc).toContain(`${LIVE}The Steam Frame costs $1,059`);
+    expect(doc).toContain("Guide: https://vr.org/meta-vr-glasses");
+    expect(doc.match(/^## /gm)).toHaveLength(EXPLAINERS.length);
+  });
+});
+
+describe("vr_explain and vrorg://guides: fallback to the built-in list", () => {
+  beforeEach(() => _resetCache());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const failures: Array<[string, () => Response | Promise<Response>]> = [
+    ["a network error", () => Promise.reject(new TypeError("fetch failed"))],
+    ["a timeout", () => Promise.reject(new DOMException("The operation timed out.", "TimeoutError"))],
+    ["an HTTP 500", () => jsonResponse({ error: "boom" }, 500)],
+    ["an HTTP 404", () => jsonResponse({ error: "not found" }, 404)],
+    ["a body that is not JSON", () => new Response("<html>502 Bad Gateway</html>", { status: 200 })],
+    ["an empty list", () => jsonResponse({ explainers: [], count: 0 })],
+    ["a JSON body of the wrong shape", () => jsonResponse({ ok: true })],
+    [
+      "a list with no valid entry",
+      () =>
+        jsonResponse({
+          explainers: [
+            { keys: ["steam frame"], title: "Spoofed", summary: "Off site.", url: "https://evil.example/x" },
+            { keys: [], title: "No keys", summary: "Nothing to match.", url: "https://vr.org/x" },
+          ],
+        }),
+    ],
+  ];
+
+  for (const [name, respond] of failures) {
+    it(`answers from the built-in list on ${name}`, async () => {
+      const fetchMock = stubFetch(respond);
+      const builtIn = findExplainer("steam frame price");
+      await expect(vr_explain({ topic: "steam frame price" })).resolves.toEqual({
+        ok: true,
+        topic: "steam frame price",
+        title: "Steam Frame Price",
+        summary: builtIn?.summary,
+        url: "https://vr.org/steam-frame-price",
+        source: "https://vr.org",
+      });
+      expect(await loadExplainers()).toBe(EXPLAINERS);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  }
+
+  it("keeps key precedence on the built-in list when the fetch fails", async () => {
+    stubFetch(() => Promise.reject(new TypeError("fetch failed")));
+    for (const { topic, want } of PRECEDENCE) {
+      const res = await vr_explain({ topic });
+      expect(res.ok && res.url, topic).toBe(`https://vr.org${want}`);
+    }
+  });
+
+  it("still reports no_explainer, with the built-in topics, for an unknown topic", async () => {
+    stubFetch(() => Promise.reject(new TypeError("fetch failed")));
+    const res = await vr_explain({ topic: "how to bake bread" });
+    expect(res).toMatchObject({ ok: false, error: "no_explainer" });
+    expect(!res.ok && res.available_topics).toEqual(EXPLAINERS.map((e) => e.title));
+    expect(!res.ok && res.hint).toContain("'steam frame'");
+  });
+
+  it("remembers a failed fetch for a minute, then tries again and recovers", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-07T12:00:00Z"));
+    let up = false;
+    const fetchMock = stubFetch(() => (up ? jsonResponse(liveFeed()) : jsonResponse({}, 503)));
+
+    for (let i = 0; i < 5; i++) await vr_explain({ topic: "steam frame" });
+    await resource_guides();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    up = true;
+    vi.setSystemTime(new Date("2026-10-07T12:00:59Z"));
+    const stillDown = await vr_explain({ topic: "steam frame" });
+    expect(stillDown.ok && stillDown.summary.startsWith(LIVE)).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date("2026-10-07T12:01:01Z"));
+    const recovered = await vr_explain({ topic: "steam frame" });
+    expect(recovered.ok && recovered.summary.startsWith(LIVE)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("builds the guides resource from the built-in list, whole and under the size cap", async () => {
+    stubFetch(() => Promise.reject(new TypeError("fetch failed")));
+    const doc = await resource_guides();
+    expect(doc.match(/^## /gm)).toHaveLength(EXPLAINERS.length);
+    expect(doc).toContain("## Valve Steam Frame");
+    expect(doc).toContain("Guide: https://vr.org/steam-frame-price");
+    expect(doc).not.toContain(LIVE);
+    expect(doc.length).toBeLessThan(MAX_RESPONSE_BYTES);
+    expect(/[\u2013\u2014]|--/.test(doc)).toBe(false);
+  });
+
+  it("still rejects a bad topic as invalid input before any fetch", async () => {
+    const fetchMock = stubFetch(() => jsonResponse(liveFeed()));
+    await expect(vr_explain({ topic: "   " })).rejects.toBeInstanceOf(ValidationError);
+    await expect(vr_explain({ topic: "x".repeat(121) })).rejects.toBeInstanceOf(ValidationError);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

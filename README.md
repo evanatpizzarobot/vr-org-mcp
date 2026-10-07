@@ -136,6 +136,17 @@ npm run typecheck  # type-check without emitting
 
 ## Changelog
 
+### 0.4.2
+
+`vr_explain` and the `vrorg://guides` resource now answer from VR.org's live explainer feed, so they stay current between releases.
+
+- The answers used to be a list compiled into the package in July 2026. By October most realistic topics ("steam frame", "steam frame price", "meta vr glasses", "quest 4") returned `no_explainer`, and several of the answers that did exist were out of date. The list is now fetched from `https://vr.org/api/explainers` and cached for ten minutes, the same way deals and events are, so a guide refresh on the site reaches agents without a package release.
+- Every fetched entry is validated before use (keys must be a non-empty list of non-empty strings, and the link must be on `https://vr.org`) and passes through the same sanitizer as other upstream text. If the fetch fails or returns nothing valid, the built-in list answers instead. That list now mirrors the site's current 34 guides, up from 10, so an offline server still gives current answers. A failed fetch is remembered for one minute so an outage does not slow down every call.
+- Matching is unchanged: the longest key contained in the topic wins, so "steam frame price" reaches the price page and not the Steam Frame hub.
+- The `explain_vr_topic` prompt no longer offers 'passthrough' as an example topic, which had no answer. It and the `no_explainer` hint now suggest 'steam frame'.
+- The `get_vr_deals` description names all five catalog sections: headsets, AR and XR glasses, accessories, haptics and body tracking, gaming hardware.
+- Bumps `@modelcontextprotocol/sdk` from 1.30.0 to 1.32.1 and refreshes the `ip-address` and `proxy-addr` pins. The advisories behind this sit in the SDK's OAuth client and HTTP transport, which this stdio server never loads. `npm audit` on the production dependencies reports zero vulnerabilities.
+
 ### 0.4.1
 
 Fixes from a September 2026 audit, matched on the hosted endpoint at vr.org/mcp.

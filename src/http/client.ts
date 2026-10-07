@@ -60,6 +60,9 @@ export const TTL = {
   TOP_LISTS: 10 * 60_000,
   SOURCES: 5 * 60_000,
   EVENTS: 10 * 60_000,
+  EXPLAINERS: 10 * 60_000,
+  // How long a failed explainer fetch is remembered before the next attempt.
+  EXPLAINERS_RETRY: 60_000,
 } as const;
 
 export async function cached<T>(

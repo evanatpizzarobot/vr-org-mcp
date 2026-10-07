@@ -180,7 +180,7 @@ server.registerTool(
   {
     title: "Get VR product deals and prices",
     description:
-      "Returns VR.org's current curated product picks (headsets, accessories, AR glasses) with prices, badges, and retailer links. Optionally filter to one section.",
+      "Returns VR.org's current curated product picks in five sections (headsets, AR and XR glasses, accessories, haptics and body tracking, gaming hardware) with prices, badges, and retailer links. Optionally filter to one section.",
     inputSchema: {
       section: z.string().max(200).optional().describe("Optional section filter, e.g. 'headsets'."),
     },
@@ -313,7 +313,7 @@ server.registerResource(
     description: "VR.org's short authoritative answers to common VR / AR / XR questions, with guide links.",
     mimeType: "text/markdown",
   },
-  readStatic("text/markdown", async () => resource_guides()),
+  readStatic("text/markdown", resource_guides),
 );
 
 server.registerResource(
@@ -387,7 +387,7 @@ server.registerPrompt(
   {
     title: "Explain a VR / AR / XR topic",
     description: "Explain a VR topic for a newcomer, grounded in VR.org's canonical answer and pillar page.",
-    argsSchema: { topic: z.string().max(500).describe("The topic, e.g. 'what is vr' or 'passthrough'.") },
+    argsSchema: { topic: z.string().max(500).describe("The topic, e.g. 'what is vr' or 'steam frame'.") },
   },
   ({ topic }) => ({
     messages: [{ role: "user", content: { type: "text", text: explainVrTopicPrompt({ topic }) } }],
