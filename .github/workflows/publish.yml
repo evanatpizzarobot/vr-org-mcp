@@ -5,22 +5,31 @@ on:
     tags:
       - "v*.*.*"
 
+# id-token: write is what lets the job prove to npm, over OIDC, that it is this
+# workflow in this repository. With a trusted publisher configured on the npm
+# package (GitHub Actions, evanatpizzarobot/vr-org-mcp, publish.yml), no
+# long-lived token is needed and provenance is attached automatically.
 permissions:
   contents: read
   id-token: write
 
 jobs:
   publish:
-    name: Publish (OIDC + provenance)
+    name: Publish (trusted publishing + provenance)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # Trusted publishing needs Node 22.14 or newer and npm 11.5.1 or newer.
+      # No dependency cache in the job that publishes.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 24.x
           registry-url: "https://registry.npmjs.org"
-          cache: npm
+
+      - name: Require npm 11.5.1 or newer
+        run: |
+          node -e "const v=process.argv[1];const [a,b,c]=v.split('.').map(Number);if(a<11||(a===11&&(b<5||(b===5&&c<1)))){console.error('npm '+v+' is too old for trusted publishing (needs 11.5.1 or newer)');process.exit(1)}console.log('npm '+v+' ok')" "$(npm --version)"
 
       - name: Install dependencies
         run: npm ci
@@ -34,7 +43,20 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Publish with provenance
+      # First choice: OIDC, with no token in the environment at all.
+      - name: Publish with trusted publishing
+        id: trusted
+        continue-on-error: true
         run: npm publish --provenance --access public
+
+      # Fallback for the transition only. If the trusted publisher is missing or
+      # misconfigured on npm, publish with the NPM_TOKEN secret and say so loudly.
+      # Once one release has gone out through the step above, delete this step,
+      # the NPM_TOKEN secret, and the token on npmjs.com.
+      - name: Publish with NPM_TOKEN (fallback)
+        if: steps.trusted.outcome == 'failure'
+        run: |
+          echo "::warning title=Trusted publishing failed::Fell back to the NPM_TOKEN secret. Check the trusted publisher settings for vr-org-mcp on npmjs.com (GitHub Actions, evanatpizzarobot/vr-org-mcp, publish.yml)."
+          npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
