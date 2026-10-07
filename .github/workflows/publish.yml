@@ -43,20 +43,9 @@ jobs:
       - name: Build
         run: npm run build
 
-      # First choice: OIDC, with no token in the environment at all.
+      # OIDC only: no token in the environment. First used for v0.4.3, which
+      # validated the trusted publisher. If this step ever fails with a 403 or
+      # 404, check the trusted publisher on the package's npm Settings page:
+      # it must name this repository and publish.yml, and allow npm publish.
       - name: Publish with trusted publishing
-        id: trusted
-        continue-on-error: true
         run: npm publish --provenance --access public
-
-      # Fallback for the transition only. If the trusted publisher is missing or
-      # misconfigured on npm, publish with the NPM_TOKEN secret and say so loudly.
-      # Once one release has gone out through the step above, delete this step,
-      # the NPM_TOKEN secret, and the token on npmjs.com.
-      - name: Publish with NPM_TOKEN (fallback)
-        if: steps.trusted.outcome == 'failure'
-        run: |
-          echo "::warning title=Trusted publishing failed::Fell back to the NPM_TOKEN secret. Check the trusted publisher settings for vr-org-mcp on npmjs.com (GitHub Actions, evanatpizzarobot/vr-org-mcp, publish.yml)."
-          npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
