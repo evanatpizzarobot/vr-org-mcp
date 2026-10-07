@@ -136,6 +136,13 @@ npm run typecheck  # type-check without emitting
 
 ## Changelog
 
+### 0.4.3
+
+Maintenance release.
+
+- The `vr_explain` tool description now names the newer topics it can answer ("steam frame price", "meta vr glasses"), so an agent reading the tool list knows to ask for them. The hosted endpoint at `https://vr.org/mcp` carries the same wording.
+- The release workflow now publishes through npm trusted publishing (OIDC) and only falls back to a token if that is rejected. Provenance is attached as before.
+
 ### 0.4.2
 
 `vr_explain` and the `vrorg://guides` resource now answer from VR.org's live explainer feed, so they stay current between releases.

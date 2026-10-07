@@ -244,9 +244,9 @@ server.registerTool(
   {
     title: "Explain a VR / AR / XR topic",
     description:
-      "Returns a canonical VR.org answer and the authoritative pillar-page link for a common VR / AR / XR question (for example 'what is vr', 'best headset', 'ar glasses', 'vr for beginners').",
+      "Returns a canonical VR.org answer and the authoritative guide link for a common VR / AR / XR question, covering the main buying guides and product hubs (for example 'what is vr', 'best headset', 'steam frame price', 'meta vr glasses', 'ar glasses', 'vr for beginners').",
     inputSchema: {
-      topic: z.string().max(500).describe("The topic or question, e.g. 'what is vr' or 'best vr headset'."),
+      topic: z.string().max(500).describe("The topic or question, e.g. 'what is vr' or 'steam frame price'."),
     },
     annotations: { ...READ_ONLY, title: "Explain a VR / AR / XR topic" },
   },
