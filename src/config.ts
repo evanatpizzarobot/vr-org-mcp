@@ -13,7 +13,7 @@
 
 import { sanitizeString } from "./security/sanitize.js";
 
-export const PACKAGE_VERSION = "0.4.4";
+export const PACKAGE_VERSION = "0.5.0";
 
 export const BASE_URL = "https://vr.org";
 

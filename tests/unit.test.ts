@@ -23,7 +23,7 @@ import {
 } from "../src/provenance.js";
 import { findExplainer, parseExplainers, EXPLAINERS } from "../src/explainers.js";
 import { vr_explain, resource_guides, loadExplainers, search_vr_news } from "../src/tools/content.js";
-import { queryTerms, searchDocs } from "../src/search.js";
+import { queryTerms, queryWords, searchDocs } from "../src/search.js";
 import { _resetCache } from "../src/http/client.js";
 import { matchHeadset } from "../src/match.js";
 import { selectEvents } from "../src/events.js";
@@ -926,6 +926,14 @@ describe("search: word-level matching", () => {
     expect(queryTerms("beat saber pass")).toEqual(["beat", "saber", "pass"]);
     expect(queryTerms("half-life: alyx")).toEqual(["half", "life", "alyx"]);
     expect(queryTerms("Pokémon")).toEqual(["pokemon"]);
+  });
+
+  it("offers the same keywords in readable form", () => {
+    expect(queryWords("Meta glasses news")).toEqual(["meta", "glasses"]);
+    expect(queryTerms("Meta glasses news")).toEqual(["meta", "glasse"]);
+    expect(queryWords("headsets headset")).toEqual(["headsets"]);
+    expect(queryWords("ar glasses")).toEqual(["glasses"]);
+    expect(queryWords("what is the latest news today")).toEqual([]);
   });
 
   it("bounds a very long query", () => {

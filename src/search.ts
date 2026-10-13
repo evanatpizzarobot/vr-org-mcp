@@ -67,26 +67,43 @@ function fold(text: unknown): string {
     .trim();
 }
 
-/** The terms a query actually searches for, in order, without duplicates. */
-export function queryTerms(query: string): string[] {
-  const strong: string[] = [];
-  const weak: string[] = [];
+interface Keyword {
+  word: string; // as written, folded
+  term: string; // what is matched: the word with a plural s removed
+}
+
+function parseQuery(query: string): Keyword[] {
+  const strong: Keyword[] = [];
+  const weak: Keyword[] = [];
   for (const raw of fold(query).split(" ")) {
     if (!raw) continue;
-    let term = raw.slice(0, MAX_TERM_CHARS);
-    if (STOPWORDS.has(term) || YEAR.test(term)) continue;
+    const word = raw.slice(0, MAX_TERM_CHARS);
+    if (STOPWORDS.has(word) || YEAR.test(word)) continue;
     // A lone letter is almost always the tail of a possessive ("valve's").
-    if (term.length === 1 && !DIGITS.test(term)) continue;
-    if (WEAK.has(term)) {
-      if (!weak.includes(term)) weak.push(term);
+    if (word.length === 1 && !DIGITS.test(word)) continue;
+    if (WEAK.has(word)) {
+      if (!weak.some((k) => k.term === word)) weak.push({ word, term: word });
       continue;
     }
     // "headsets" and "headset" should find each other. A double s is left
     // alone so "pass" does not become "pas".
-    if (term.length > 3 && term.endsWith("s") && !term.endsWith("ss")) term = term.slice(0, -1);
-    if (!strong.includes(term)) strong.push(term);
+    const term = word.length > 3 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word;
+    if (!strong.some((k) => k.term === term)) strong.push({ word, term });
   }
   return (strong.length > 0 ? strong : weak).slice(0, MAX_TERMS);
+}
+
+/** The terms a query actually searches for, in order, without duplicates. */
+export function queryTerms(query: string): string[] {
+  return parseQuery(query).map((k) => k.term);
+}
+
+/**
+ * The same keywords as queryTerms, as the caller wrote them ("glasses", where
+ * the term is "glasse"). For showing a search to a person, not for matching.
+ */
+export function queryWords(query: string): string[] {
+  return parseQuery(query).map((k) => k.word);
 }
 
 interface Haystack {

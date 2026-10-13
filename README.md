@@ -136,6 +136,16 @@ npm run typecheck  # type-check without emitting
 
 ## Changelog
 
+### 0.5.0
+
+Protocol upgrade. Requires Node.js 20 or newer.
+
+- The server now runs on the MCP SDK v2 (`@modelcontextprotocol/server`) and speaks the 2026-07-28 protocol revision. Clients on the 2025 revisions connect exactly as before: the opening message decides which revision a connection uses.
+- Node.js 18 is no longer supported, because the v2 SDK needs Node.js 20. If you are pinned to Node 18, stay on 0.4.4.
+- The install is much smaller. The old SDK pulled in an HTTP stack this stdio server never used, more than 80 packages of it. The production dependency tree is now three packages, and `npm audit` is clean with no overrides.
+- The hosted endpoint at `https://vr.org/mcp` moved to the same protocol on the same day. It also answers at `/mcp` directly now instead of redirecting to `/api/mcp`, which halves the round trips for clients configured with the short URL.
+- No tool, resource or prompt changed.
+
 ### 0.4.4
 
 `search_vr_news` now matches on words instead of one exact phrase.
