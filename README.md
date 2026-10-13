@@ -71,7 +71,7 @@ Human setup walkthrough for every client: [vr.org/connect](https://vr.org/connec
 
 | Tool | What it returns |
 |------|-----------------|
-| `search_vr_news` | Latest VR / AR / XR headlines from the live feed, with optional category filter and keyword match |
+| `search_vr_news` | Latest VR / AR / XR headlines from the live feed, with optional category filter and keyword search (all keywords must match, in any order) |
 | `get_vr_trending` | Topics currently trending across the feed |
 | `list_vr_originals` | Summaries of VR.org's own editorial articles, newest first |
 | `get_vr_article` | Full content of one original by slug: metadata, canonical URL, and the article body HTML |
@@ -135,6 +135,16 @@ npm run typecheck  # type-check without emitting
 ```
 
 ## Changelog
+
+### 0.4.4
+
+`search_vr_news` now matches on words instead of one exact phrase.
+
+- The keyword filter used to require the whole query to appear, as typed, somewhere in a headline or snippet. Agents tend to send queries like "steam frame release date" or "best vr headset 2026", and those came back empty even when the feed was full of matching stories. In a replay of 25 realistic queries against the live feed, 18 returned nothing.
+- A query is now split into keywords. Filler ("what is the latest", "news", "today", years and month names) is dropped, and every remaining keyword has to appear in the headline, snippet, tags, category or source name, in any order. Plurals match singulars, punctuation is ignored ("half-life alyx" finds "Half-Life: Alyx"), and a model name typed without its space still matches ("psvr2" finds "PS VR2"). Numbers and two-letter terms match whole words only, so "quest 3" does not return Quest 3S stories.
+- Headline matches are listed first, newest first inside each group.
+- When a query is sent, the response adds `match` (`all_terms`, `partial`, `none`, or `latest` for a query that was all filler), `terms` (the keywords actually used) and `total_matches`. If nothing matches every keyword, the closest matches are returned and labelled `partial` with a `hint`. A call with no query returns exactly what it did before.
+- The hosted endpoint at `https://vr.org/mcp` carries the same matcher.
 
 ### 0.4.3
 

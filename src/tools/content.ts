@@ -25,6 +25,7 @@ import {
 import { EXPLAINERS, findExplainer, parseExplainers, type Explainer } from "../explainers.js";
 import { matchHeadset } from "../match.js";
 import { selectEvents } from "../events.js";
+import { searchDocs, type SearchOutcome } from "../search.js";
 import {
   formatNewsIndex,
   formatOriginalsIndex,
@@ -103,11 +104,20 @@ export async function search_vr_news(args: {
   )) as { articles?: RawArticle[]; meta?: { lastUpdated?: string } };
 
   let articles = Array.isArray(data?.articles) ? data.articles : [];
+  // Word-level match, headline hits first, newest first inside each group. A
+  // query made only of filler ("latest vr news") filters nothing. With no query
+  // at all the feed keeps the order the site served it in. See src/search.ts.
+  let found: SearchOutcome<RawArticle> | null = null;
   if (query) {
-    const q = query.toLowerCase();
-    articles = articles.filter((a) =>
-      `${a.title ?? ""} ${a.snippet ?? ""}`.toLowerCase().includes(q),
+    found = searchDocs(
+      articles.map((a) => ({
+        ...a,
+        source: a.sourceName ?? a.source,
+        published: a.pubDate ?? a.publishDate,
+      })),
+      query,
     );
+    articles = found.items;
   }
 
   const items = articles.slice(0, limit).map(mapFeedArticle);
@@ -116,6 +126,21 @@ export async function search_vr_news(args: {
     query: query ? sanitizeReflectedValue(query) : null,
     category: category ?? "all",
     count: items.length,
+    // The search fields appear only when a query was sent, so a no-query call
+    // keeps the response shape it has always had.
+    ...(found
+      ? {
+          total_matches: articles.length,
+          match: found.match,
+          terms: found.terms,
+          ...(found.match === "partial"
+            ? { hint: "No headline matched every term. These match at least half of them." }
+            : {}),
+          ...(found.match === "none"
+            ? { hint: "Nothing matched. Try fewer or broader keywords, or omit the query for the latest headlines." }
+            : {}),
+        }
+      : {}),
     last_updated: data?.meta?.lastUpdated ?? null,
     articles: items,
     // Only attached when the payload actually carries relayed text, so the

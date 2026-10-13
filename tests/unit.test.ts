@@ -22,7 +22,8 @@ import {
   provenanceOf,
 } from "../src/provenance.js";
 import { findExplainer, parseExplainers, EXPLAINERS } from "../src/explainers.js";
-import { vr_explain, resource_guides, loadExplainers } from "../src/tools/content.js";
+import { vr_explain, resource_guides, loadExplainers, search_vr_news } from "../src/tools/content.js";
+import { queryTerms, searchDocs } from "../src/search.js";
 import { _resetCache } from "../src/http/client.js";
 import { matchHeadset } from "../src/match.js";
 import { selectEvents } from "../src/events.js";
@@ -898,5 +899,184 @@ describe("vr_explain and vrorg://guides: fallback to the built-in list", () => {
     await expect(vr_explain({ topic: "   " })).rejects.toBeInstanceOf(ValidationError);
     await expect(vr_explain({ topic: "x".repeat(121) })).rejects.toBeInstanceOf(ValidationError);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// The first matcher needed the whole query to appear as one exact substring of
+// title + snippet, so "steam frame release date" and "half-life alyx" returned
+// nothing. A replica over the live corpus put the miss rate at 18 of 25
+// realistic queries (2026-10-12). The hosted endpoint carries the same module.
+describe("search: word-level matching", () => {
+  const ids = (r: { items: { id: string }[] }) => r.items.map((d) => d.id);
+
+  it("drops filler and keeps the topic words", () => {
+    expect(queryTerms("What is the latest Steam Frame news?")).toEqual(["steam", "frame"]);
+    expect(queryTerms("vr fitness")).toEqual(["fitness"]);
+    expect(queryTerms("Steam Frame October 2026")).toEqual(["steam", "frame"]);
+    expect(queryTerms("what is the latest news today")).toEqual([]);
+  });
+
+  it("keeps ar and xr only when they are the whole query", () => {
+    expect(queryTerms("XR")).toEqual(["xr"]);
+    expect(queryTerms("ar glasses")).toEqual(["glasse"]);
+  });
+
+  it("reduces plurals, folds accents and splits on punctuation", () => {
+    expect(queryTerms("headsets games")).toEqual(["headset", "game"]);
+    expect(queryTerms("beat saber pass")).toEqual(["beat", "saber", "pass"]);
+    expect(queryTerms("half-life: alyx")).toEqual(["half", "life", "alyx"]);
+    expect(queryTerms("Pokémon")).toEqual(["pokemon"]);
+  });
+
+  it("bounds a very long query", () => {
+    const long = Array.from({ length: 40 }, (_, i) => `term${i}`).join(" ");
+    expect(queryTerms(long)).toHaveLength(12);
+  });
+
+  it("matches words that are not adjacent and requires every term", () => {
+    const docs = [
+      { id: "date", title: "Valve gives Steam Frame a release date" },
+      { id: "price", title: "Steam Frame price confirmed" },
+      { id: "deck", title: "Steam Deck gets a new dock" },
+    ];
+    expect(ids(searchDocs(docs, "steam frame release date"))).toEqual(["date"]);
+    expect(ids(searchDocs(docs, "steam frame price"))).toEqual(["price"]);
+    expect(searchDocs(docs, "steam frame price").match).toBe("all_terms");
+  });
+
+  it("looks past punctuation and searches tags and source", () => {
+    expect(ids(searchDocs([{ id: "alyx", title: "Half-Life: Alyx turns six" }], "half-life alyx"))).toEqual(["alyx"]);
+    const tagged = [
+      { id: "tagged", title: "Valve's headset finally ships", tags: ["steam-frame"] },
+      { id: "other", title: "Pico ships a headset", tags: ["pico"] },
+    ];
+    expect(ids(searchDocs(tagged, "steam frame"))).toEqual(["tagged"]);
+    const sourced = [
+      { id: "rtvr", title: "A headline", source: "Road to VR" },
+      { id: "verge", title: "Another headline", source: "The Verge" },
+    ];
+    expect(ids(searchDocs(sourced, "verge"))).toEqual(["verge"]);
+  });
+
+  it("matches numbers and two-letter terms as whole words only", () => {
+    const quest = [
+      { id: "q3", title: "Quest 3 gets a price cut" },
+      { id: "q3s", title: "Quest 3S bundle returns" },
+      { id: "y2023", title: "Quest sales in 2023 were flat" },
+    ];
+    expect(ids(searchDocs(quest, "quest 3"))).toEqual(["q3"]);
+    const short = [
+      { id: "ar", title: "AR glasses get cheaper" },
+      { id: "arcade", title: "Arcade cabinets return to malls" },
+    ];
+    expect(ids(searchDocs(short, "ar"))).toEqual(["ar"]);
+  });
+
+  it("matches a model name typed without its space", () => {
+    const docs = [
+      { id: "psvr2", title: "PS VR2 sales climb" },
+      { id: "q3", title: "Meta Quest 3 update lands" },
+    ];
+    expect(ids(searchDocs(docs, "psvr2"))).toEqual(["psvr2"]);
+    expect(ids(searchDocs(docs, "quest3"))).toEqual(["q3"]);
+  });
+
+  it("lists headline matches first, newest first inside each group", () => {
+    const docs = [
+      { id: "snippet-new", title: "Valve updates its store", snippet: "Steam Frame owners get a new tab.", published: "2026-10-05T00:00:00Z" },
+      { id: "title-old", title: "Steam Frame review", published: "2026-09-01T00:00:00Z" },
+      { id: "title-new", title: "Steam Frame ships", published: "2026-10-04T00:00:00Z" },
+    ];
+    expect(ids(searchDocs(docs, "steam frame"))).toEqual(["title-new", "title-old", "snippet-new"]);
+  });
+
+  it("returns everything newest first when the query has no usable terms", () => {
+    const docs = [
+      { id: "old", title: "Old story", published: "2026-01-01T00:00:00Z" },
+      { id: "new", title: "New story", published: "2026-10-01T00:00:00Z" },
+      { id: "undated", title: "Undated story" },
+    ];
+    expect(ids(searchDocs(docs, ""))).toEqual(["new", "old", "undated"]);
+    expect(searchDocs(docs, "latest vr news today").match).toBe("latest");
+    expect(docs.map((d) => d.id)).toEqual(["old", "new", "undated"]);
+  });
+
+  it("falls back to the closest matches, and to nothing when there is no overlap", () => {
+    const docs = [
+      { id: "q3s", title: "Quest 3S gets a new colour" },
+      { id: "quest", title: "Quest software update" },
+      { id: "pico", title: "Pico 5 leaks" },
+    ];
+    const partial = searchDocs(docs, "quest 3s deal");
+    expect(ids(partial)).toEqual(["q3s"]);
+    expect(partial.match).toBe("partial");
+    expect(searchDocs(docs, "zzzz qqqq")).toEqual({ items: [], terms: ["zzzz", "qqqq"], match: "none" });
+    expect(ids(searchDocs(docs, "zzzz"))).toEqual([]);
+  });
+});
+
+describe("search_vr_news: word-level search over the feed", () => {
+  beforeEach(() => _resetCache());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const feed = () => ({
+    articles: [
+      { title: "Pico 5 leaks", link: "https://uploadvr.com/pico", source: "uploadvr", sourceName: "UploadVR", pubDate: "2026-10-04T00:00:00Z", category: "hardware", tags: [], snippet: "A new headset." },
+      { title: "Half-Life: Alyx turns six", link: "https://www.roadtovr.com/alyx", source: "roadtovr", sourceName: "Road to VR", pubDate: "2026-10-03T00:00:00Z", category: "gaming", tags: [], snippet: "Still the benchmark." },
+      { title: "Quest 3S gets a new colour", link: "https://uploadvr.com/q3s", source: "uploadvr", sourceName: "UploadVR", pubDate: "2026-10-02T00:00:00Z", category: "hardware", tags: [], snippet: "It is green." },
+      { title: "Valve gives Steam Frame a release date", link: "/articles/steam-frame-date", source: "vrorg", sourceName: "VR.org", pubDate: "2026-10-01T00:00:00Z", category: "hardware", tags: ["steam-frame"], snippet: "The wait has an end." },
+    ],
+    meta: { lastUpdated: "2026-10-04T01:00:00Z" },
+  });
+
+  it("finds a multi-word query whose words are not adjacent", async () => {
+    stubFetch(() => jsonResponse(feed()));
+    const res = await search_vr_news({ query: "steam frame release date" });
+    expect(res.count).toBe(1);
+    expect(res.articles[0]?.title).toBe("Valve gives Steam Frame a release date");
+    expect(res).toMatchObject({ match: "all_terms", total_matches: 1, terms: ["steam", "frame", "release", "date"] });
+  });
+
+  it("looks past punctuation in a headline", async () => {
+    stubFetch(() => jsonResponse(feed()));
+    const res = await search_vr_news({ query: "half-life alyx" });
+    expect(res.articles.map((a) => a.title)).toEqual(["Half-Life: Alyx turns six"]);
+  });
+
+  it("keeps the old response shape when no query is sent", async () => {
+    stubFetch(() => jsonResponse(feed()));
+    const res = await search_vr_news({ limit: 2 });
+    expect(res.count).toBe(2);
+    expect(res.query).toBeNull();
+    expect(res.articles.map((a) => a.title)).toEqual(["Pico 5 leaks", "Half-Life: Alyx turns six"]);
+    expect("match" in res).toBe(false);
+    expect("terms" in res).toBe(false);
+    expect("total_matches" in res).toBe(false);
+  });
+
+  it("treats an all-filler query as a request for the latest headlines", async () => {
+    stubFetch(() => jsonResponse(feed()));
+    const res = await search_vr_news({ query: "latest vr news today" });
+    expect(res.count).toBe(4);
+    expect(res).toMatchObject({ match: "latest", terms: [] });
+  });
+
+  it("labels closest matches as partial and explains it", async () => {
+    stubFetch(() => jsonResponse(feed()));
+    const res = await search_vr_news({ query: "quest 3s deal" });
+    expect(res.articles.map((a) => a.title)).toEqual(["Quest 3S gets a new colour"]);
+    expect(res).toMatchObject({ match: "partial" });
+    expect((res as { hint?: string }).hint).toMatch(/at least half/);
+  });
+
+  it("returns nothing with a hint when there is no overlap", async () => {
+    stubFetch(() => jsonResponse(feed()));
+    const res = await search_vr_news({ query: "zzzz qqqq" });
+    expect(res.count).toBe(0);
+    expect(res).toMatchObject({ match: "none", total_matches: 0 });
+    expect((res as { hint?: string }).hint).toMatch(/omit the query/);
+    expect("content_notice" in res).toBe(false);
   });
 });

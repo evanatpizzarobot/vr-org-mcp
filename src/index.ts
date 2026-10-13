@@ -105,9 +105,13 @@ server.registerTool(
   {
     title: "Search VR / AR / XR news",
     description:
-      "Returns the latest VR, AR, and XR headlines from VR.org's live aggregated feed (VR-native sources plus filtered general tech). Optionally filter by category and match a keyword in the title or snippet.",
+      "Returns the latest VR, AR, and XR headlines from VR.org's live aggregated feed plus VR.org originals, newest first. Optionally filter by category and by keywords: every keyword must appear in the headline, snippet, tags or source, in any order, and headline matches are listed first. Use a few keywords ('steam frame price') rather than a sentence, and omit the query for the latest headlines.",
     inputSchema: {
-      query: z.string().max(500).optional().describe("Optional keyword to match in the title or snippet."),
+      query: z
+        .string()
+        .max(500)
+        .optional()
+        .describe("Optional keywords, e.g. 'steam frame price'. All must match, in any order. Omit for the latest headlines."),
       category: z.string().max(100).optional().describe(CATEGORY_DESC),
       limit: z.number().optional().describe("Max results, 1-50 (default 20)."),
     },
