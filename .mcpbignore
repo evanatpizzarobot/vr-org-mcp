@@ -18,3 +18,4 @@ mcp-publisher.exe
 package-lock.json
 smoke.mjs
 mcp-smoke.mjs
+.superpowers/

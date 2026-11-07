@@ -6,18 +6,14 @@
 # Docs: https://smithery.ai/docs/build/project-config/smithery.yaml
 startCommand:
   type: stdio
-  # The server needs no configuration. The single optional field overrides the
-  # VR.org base URL (only useful for pointing at a staging copy of the site).
+  # The server needs no configuration. The VR.org API base URL is fixed in
+  # source (src/config.ts) and cannot be overridden.
   configSchema:
     type: object
-    properties:
-      vrOrgBaseUrl:
-        type: string
-        description: Optional base URL override. Defaults to https://vr.org.
+    properties: {}
     required: []
   commandFunction: |-
-    (config) => ({
+    () => ({
       command: 'npx',
-      args: ['-y', 'vr-org-mcp'],
-      env: config.vrOrgBaseUrl ? { VR_ORG_BASE_URL: config.vrOrgBaseUrl } : {}
+      args: ['-y', 'vr-org-mcp']
     })

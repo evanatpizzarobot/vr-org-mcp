@@ -111,8 +111,9 @@ Every tool composes VR.org's public JSON API (`https://vr.org/api/*`) into a sin
 
 VR.org's editorial is controlled, but the live feed also carries third-party RSS headlines. To keep a malicious or compromised upstream headline from manipulating the calling model, every tool output is:
 
-1. **Sanitized.** Control characters and zero-width / direction-override characters are stripped from every string.
-2. **Capped.** Serialized responses are limited to 50 KB so a large payload cannot flood the agent's context window.
+1. **Sanitized.** Control characters and invisible characters (zero-width and direction-override marks, bidi isolates, variation selectors, soft hyphens and Unicode tag characters) are stripped from every string.
+2. **Escaped.** In the markdown resources, relayed headlines, source names and snippets are escaped so they cannot close a link and plant one of their own, and a link target is kept only if it is an absolute http(s) URL.
+3. **Capped.** Serialized responses are limited to 50 KB so a large payload cannot flood the agent's context window.
 
 Inputs are validated before any outbound request and every free-text parameter is length-capped at the schema layer. Errors are returned as structured, non-echoing objects rather than raw stack traces; on the rare path where an error string reaches the caller it runs through the same output scrub as a tool result, with any credential-shaped substring redacted and the text capped, and is flagged with `isError`.
 
@@ -135,6 +136,18 @@ npm run typecheck  # type-check without emitting
 ```
 
 ## Changelog
+
+### 0.5.1
+
+Security hardening. Requires Node.js 22 or newer.
+
+- The output sanitizer now also strips Unicode tag characters (U+E0000 to U+E007F, the range used to hide ASCII instructions inside text that looks blank), bidi isolates, variation selectors, soft hyphens, line and paragraph separators and similar invisible characters. Accented letters, CJK text, the en dash and prices pass through unchanged.
+- The `vrorg://news/latest` and `vrorg://originals/latest` resources escape headlines, source and author names and snippets before putting them into markdown, so a crafted headline cannot close its link and add a link or image of its own. A link target is kept only if it is an absolute http(s) URL, with parentheses and angle brackets percent-encoded; anything else (a `javascript:` URL, for example) becomes an empty link.
+- Node.js 20 reached end of life in April 2026, so the package now declares Node.js 22 or newer. CI tests on Node 22 and 24.
+- The release workflow builds and packs in one job with no publish permission, then publishes that exact tarball from a second job that holds the OIDC permission and runs no dependency code. Every GitHub Action is pinned to a full commit SHA, and checkouts no longer keep the token.
+- `smithery.yaml` and `.env.example` no longer advertise a `VR_ORG_BASE_URL` override. The server has ignored it since 0.3.2; the base URL is fixed to `https://vr.org`.
+- `@modelcontextprotocol/server` 2.3.1 to 2.4.0. The test runner moves from vitest 1 to vitest 5, which clears the development-only audit findings; `npm audit` reports zero vulnerabilities for the full tree.
+- No tool, resource or prompt was added or removed, and no argument changed.
 
 ### 0.5.0
 

@@ -48,8 +48,47 @@ function dateOnly(d?: string | null): string {
   return typeof d === "string" ? d.slice(0, 10) : "";
 }
 
+/**
+ * Backslash-escape the characters that let text break out of markdown link
+ * text. Third-party RSS headlines land inside `[...](...)`, so a headline such
+ * as `x](https://evil.example) ![y](z)` would otherwise close the link early and
+ * plant a link or image of its own in the calling agent's context. The same
+ * escape runs over source and author names and snippet lines. Null and
+ * undefined come back as "".
+ */
+export function escapeMd(s: string | null | undefined): string {
+  if (typeof s !== "string") return "";
+  return s.replace(/[\[\]()!<>\\]/g, "\\$&");
+}
+
+/**
+ * Make a relayed URL safe to use as a markdown link target. Anything that is
+ * not an absolute http(s) URL (javascript:, data:, a relative path, garbage)
+ * becomes "". The URL parser already percent-encodes spaces, but it leaves
+ * parentheses and some angle brackets alone, so those are encoded by char code
+ * here: a URL like `https://a.example/x) ![y](https://b.example/p.png` cannot
+ * close the link early and append an image of its own.
+ */
+export function safeUrl(u: string | null | undefined): string {
+  if (!u) return "";
+  try {
+    const parsed = new URL(u);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+    // encodeURIComponent leaves ( and ) alone, so encode by char code.
+    return parsed.href.replace(
+      /[()<>\s]/g,
+      (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0"),
+    );
+  } catch {
+    return "";
+  }
+}
+
 function metaParens(parts: Array<string | null | undefined>): string {
-  const joined = parts.filter(Boolean).join(", ");
+  const joined = parts
+    .filter(Boolean)
+    .map((p) => escapeMd(p))
+    .join(", ");
   return joined ? ` (${joined})` : "";
 }
 
@@ -64,7 +103,9 @@ export function formatNewsIndex(items: NewsItem[]): string {
   ];
   const kept = items.filter((it) => it.title);
   for (const it of kept) {
-    lines.push(`- [${it.title}](${it.url ?? ""})${metaParens([it.source, dateOnly(it.published)])}`);
+    lines.push(
+      `- [${escapeMd(it.title)}](${safeUrl(it.url)})${metaParens([it.source, dateOnly(it.published)])}`,
+    );
   }
   if (kept.length === 0) lines.push("No headlines available right now.");
   return lines.join("\n");
@@ -79,8 +120,8 @@ export function formatOriginalsIndex(items: OriginalItem[]): string {
   ];
   const kept = items.filter((it) => it.title);
   for (const it of kept) {
-    lines.push(`- [${it.title}](${it.url ?? ""})${metaParens([it.author, dateOnly(it.published)])}`);
-    if (it.snippet) lines.push(`  ${it.snippet}`);
+    lines.push(`- [${escapeMd(it.title)}](${safeUrl(it.url)})${metaParens([it.author, dateOnly(it.published)])}`);
+    if (it.snippet) lines.push(`  ${escapeMd(it.snippet)}`);
   }
   if (kept.length === 0) lines.push("No articles available.");
   return lines.join("\n");

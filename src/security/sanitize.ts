@@ -21,10 +21,27 @@
  *   - U+000E-U+001F  remaining C0 controls (CR preserved)
  *   - U+007F         DEL
  *   - U+0080-U+009F  C1 controls
+ *   - U+00AD         soft hyphen
+ *   - U+034F         combining grapheme joiner
+ *   - U+061C         Arabic letter mark
+ *   - U+115F-U+1160  Hangul choseong / jungseong fillers
+ *   - U+180B-U+180F  Mongolian variation selectors + vowel separator
  *   - U+200B-U+200F  zero-width chars + LRM/RLM
- *   - U+202A-U+202E  bidi embedding/override marks
- *   - U+2060-U+2064  word joiner + invisible separators
+ *   - U+2028-U+202E  line / paragraph separators + bidi embedding/override
+ *   - U+2060-U+206F  word joiner, invisible operators, bidi isolates
+ *                    (U+2066-U+2069) and deprecated format controls
+ *   - U+3164         Hangul filler
+ *   - U+FE00-U+FE0F  variation selectors
  *   - U+FEFF         zero-width no-break space (BOM)
+ *   - U+FFA0         halfwidth Hangul filler
+ *   - U+FFF9-U+FFFB  interlinear annotation controls
+ *   - U+E0000-U+E007F  Unicode tag characters (invisible ASCII smuggling)
+ *   - U+E0100-U+E01EF  variation selectors supplement
+ *
+ * Accented letters, CJK text, the en dash and currency signs pass through
+ * untouched. The invisible-character class needs the "u" flag so the
+ * astral-plane ranges (tags, variation selectors supplement) match whole
+ * code points instead of surrogate halves.
  */
 
 const CONTROL_CHARS = new RegExp(
@@ -33,8 +50,8 @@ const CONTROL_CHARS = new RegExp(
 );
 
 const ZERO_WIDTH = new RegExp(
-  "[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\uFEFF]",
-  "g",
+  "[\\u00AD\\u034F\\u061C\\u115F\\u1160\\u180B-\\u180F\\u200B-\\u200F\\u2028-\\u202E\\u2060-\\u206F\\u3164\\uFE00-\\uFE0F\\uFEFF\\uFFA0\\uFFF9-\\uFFFB\\u{E0000}-\\u{E007F}\\u{E0100}-\\u{E01EF}]",
+  "gu",
 );
 
 const DEFAULT_MAX_STRING = 4096;

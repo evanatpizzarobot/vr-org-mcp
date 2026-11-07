@@ -9,3 +9,5 @@ key.pem
 *.pem
 mcp-publisher.exe
 *.tar.gz
+.superpowers/
+*.tgz

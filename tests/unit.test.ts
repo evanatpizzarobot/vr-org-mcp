@@ -33,6 +33,8 @@ import {
   formatEventsList,
   formatGuidesDoc,
   formatArticle,
+  escapeMd,
+  safeUrl,
 } from "../src/resources.js";
 import {
   recommendHeadsetPrompt,
@@ -81,6 +83,22 @@ describe("sanitize", () => {
 
   it("preserves tab, newline, carriage return", () => {
     expect(sanitizeString("a\tb\nc\r")).toBe("a\tb\nc\r");
+  });
+
+  it("strips Unicode tag characters used for invisible ASCII smuggling", () => {
+    // U+E0041 / U+E0042 / U+E007F are tag "A", tag "B" and cancel tag.
+    const dirty = "safe\u{E0041}\u{E0042}\u{E007F}text";
+    expect(sanitizeString(dirty)).toBe("safetext");
+  });
+
+  it("strips bidi isolates, variation selectors and soft hyphens", () => {
+    const dirty = "a\u2066b\u2069c\uFE0Fd\u00ADe\u{E0100}f";
+    expect(sanitizeString(dirty)).toBe("abcdef");
+  });
+
+  it("leaves accents, CJK, the en dash and prices alone", () => {
+    const clean = "Caf\u00E9 \u6771\u4EAC \u2013 $499";
+    expect(sanitizeString(clean)).toBe(clean);
   });
 
   it("caps long strings", () => {
@@ -284,6 +302,78 @@ describe("resource formatters", () => {
     expect(out).toContain("# Latest VR / AR / XR headlines");
     expect(out).toContain("[Quest 4 leaks](https://vr.org/x)");
     expect(out).toContain("(Road to VR, 2026-07-01)");
+  });
+
+  it("escapes a third-party headline that tries to break out of its link text", () => {
+    const out = formatNewsIndex([
+      { title: "Quest 4 ](https://evil.example) ![x](y)", url: "https://example.com/story", source: "S" },
+    ]);
+    expect(out).toContain(
+      "- [Quest 4 \\]\\(https://evil.example\\) \\!\\[x\\]\\(y\\)](https://example.com/story)",
+    );
+    expect(out).not.toContain("](https://evil.example)");
+    expect(out).not.toContain("![x](y)");
+  });
+
+  it("percent-encodes a relayed URL that tries to close its link destination", () => {
+    const out = formatNewsIndex([
+      { title: "T", url: "https://example.com/a) ![x](https://evil.example/p.png", source: "S" },
+    ]);
+    expect(out).toContain("[T](https://example.com/a%29%20![x]%28https://evil.example/p.png)");
+    expect(out).not.toContain("![x](");
+  });
+
+  it("drops a non-http link target from the news index", () => {
+    const out = formatNewsIndex([{ title: "T", url: "javascript:alert(1)", source: "S" }]);
+    expect(out).toContain("- [T]() (S)");
+    expect(out).not.toContain("javascript");
+  });
+
+  it("escapes source, author and snippet text as well as titles", () => {
+    const news = formatNewsIndex([
+      { title: "T", url: "https://example.com/n", source: "Feed](https://evil.example)" },
+    ]);
+    expect(news).toContain("(Feed\\]\\(https://evil.example\\))");
+    const originals = formatOriginalsIndex([
+      {
+        title: "O",
+        url: "https://vr.org/articles/o",
+        author: "A ![x](y)",
+        snippet: "See [here](https://evil.example)",
+      },
+    ]);
+    expect(originals).toContain("(A \\!\\[x\\]\\(y\\))");
+    expect(originals).toContain("  See \\[here\\]\\(https://evil.example\\)");
+    expect(originals).not.toContain("](https://evil.example)");
+  });
+
+  it("escapeMd returns an empty string for null and undefined", () => {
+    expect(escapeMd(null)).toBe("");
+    expect(escapeMd(undefined)).toBe("");
+  });
+
+  it("safeUrl rejects a javascript: URL", () => {
+    expect(safeUrl("javascript:alert(1)")).toBe("");
+  });
+
+  it("safeUrl rejects relative, empty and unparseable input", () => {
+    expect(safeUrl("/articles/x")).toBe("");
+    expect(safeUrl("")).toBe("");
+    expect(safeUrl(null)).toBe("");
+    expect(safeUrl("data:text/html,<b>x</b>")).toBe("");
+  });
+
+  it("safeUrl encodes a URL that tries to close its link target", () => {
+    const out = safeUrl("https://evil.example/a) ![x](https://t.example/p.png");
+    expect(out).toContain("%29");
+    expect(out).not.toContain(")");
+    expect(out).not.toContain("(");
+    expect(out).not.toContain(" ");
+  });
+
+  it("safeUrl leaves a normal https URL unchanged", () => {
+    const url = "https://www.roadtovr.com/steam-frame-review/?utm_source=rss#comments";
+    expect(safeUrl(url)).toBe(url);
   });
 
   it("shows an empty-state line when there is no news", () => {
