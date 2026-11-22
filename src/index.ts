@@ -51,6 +51,7 @@ import { safeRun } from "./security/errors.js";
 import { sanitizeValue, sanitizeString, sanitizeErrorText } from "./security/sanitize.js";
 import { enforceResponseCap, MAX_RESPONSE_BYTES } from "./security/limits.js";
 import { PACKAGE_VERSION } from "./config.js";
+import { SERVER_INSTRUCTIONS } from "./instructions.js";
 
 /**
  * Every tool here is read-only and depends on VR.org's live API, so all
@@ -106,10 +107,14 @@ const CATEGORY_DESC =
  * nothing in here may hold state between calls.
  */
 function buildServer(): McpServer {
-  const server = new McpServer({
-    name: "vr-org-mcp",
-    version: PACKAGE_VERSION,
-  });
+  const server = new McpServer(
+    {
+      name: "vr-org-mcp",
+      version: PACKAGE_VERSION,
+    },
+    // Sent in the initialize result. Clients place it ahead of the tool list.
+    { instructions: SERVER_INSTRUCTIONS },
+  );
 
   server.registerTool(
     "search_vr_news",

@@ -137,6 +137,13 @@ npm run typecheck  # type-check without emitting
 
 ## Changelog
 
+### 0.5.3
+
+Server instructions.
+
+- The server now sends `instructions` in its initialize result: a short note on which tool fits which kind of question, and how to treat what comes back, including relayed third-party headlines. Clients that support the field place it ahead of the tool list. The hosted endpoint at `https://vr.org/mcp` sends the same text.
+- No tool, resource, prompt, argument or dependency changed.
+
 ### 0.5.2
 
 Registry listing only.
