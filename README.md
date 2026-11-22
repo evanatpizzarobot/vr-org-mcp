@@ -137,6 +137,13 @@ npm run typecheck  # type-check without emitting
 
 ## Changelog
 
+### 0.5.2
+
+Registry listing only.
+
+- `server.json` now lists the hosted endpoint, `https://vr.org/mcp` (streamable HTTP), under `remotes`, next to the npm package. Clients and directories that read the MCP Registry can offer the no-install connection as well as `npx -y vr-org-mcp`.
+- No tool, resource, prompt, argument or dependency changed. The only change to the published package is its version number.
+
 ### 0.5.1
 
 Security hardening. Requires Node.js 22 or newer.
